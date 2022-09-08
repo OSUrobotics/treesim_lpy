@@ -1,2 +1,6 @@
 *.lpy~
+*.py~
 __pycache__
+.*
+*.obj
+*.ply
