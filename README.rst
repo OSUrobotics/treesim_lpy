@@ -9,6 +9,10 @@ and tying trees down to mimic different architectures.
 .. image:: media/envy.png
    :width: 500
    :height: 300
+
+.. video:: media/vid/ufo_3d.mov
+   :width: 500
+   :height: 300
   
 
 Image Envy
