@@ -10,7 +10,7 @@ and tying trees down to mimic different architectures.
    :width: 500
    :height: 300
 
-.. video:: media/ufo.png
+.. image:: media/ufo.png
    :width: 500
    :height: 300
   
