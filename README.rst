@@ -1,21 +1,22 @@
 TreeSim_Lpy
 ###############
 
-README in process
+.. note::
+   README in process
 
 TreeSim_Lpy is a tree modelling tool which is built upon L-py with the added features of pruning
 and tying trees down to mimic different architectures.
 
-.. image:: media/envy.png
+.. figure:: media/envy.png
    :width: 500
    :height: 300
+   Example of a labelled, pruned and tied envy tree system using TreeSim_Lpy
+   
 
-.. image:: media/ufo.png
+.. figure:: media/ufo.png
    :width: 500
    :height: 300
+   Example of a labelled, pruned and tied UFO tree system using TreeSim_Lpy
   
-
-Image Envy
-Image UFO
 
 The documentation is provided at https://treesim-lpy.readthedocs.io/en/latest/
