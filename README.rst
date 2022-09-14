@@ -1,5 +1,6 @@
+============
 TreeSim_Lpy
-###############
+============
 
 .. note::
    README in process
@@ -25,3 +26,23 @@ and tying trees down to mimic different architectures.
   
 
 The documentation is provided at https://treesim-lpy.readthedocs.io/en/latest/
+
+=============
+Documentation
+=============
+
+Documentation is available at `<https://treesim-lpy.readthedocs.io/en/latest/>`_
+
+Help and Support
+----------------
+
+Please open an **Issue** if you need support or you run into any error (Installation, Runtime, etc.).
+We'll try to resolve it as soon as possible.
+
+
+==============
+Citations
+==============
+
+   - F. Boudon, T. Cokelaer, C. Pradal, P. Prusinkiewicz and C. Godin, L-Py: an L-system simulation framework for modeling plant architecture development based on a dynamic language, Frontiers in Plant Science, 30 May 2012.
+
