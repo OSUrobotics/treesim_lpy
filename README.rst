@@ -2,15 +2,11 @@
 TreeSim_Lpy
 ============
 
-.. note::
-   README in process
-   
-.. --->
 
 TreeSim_Lpy is a tree modelling tool which is built upon L-py with the added features of pruning
 and tying trees down to mimic different architectures. The tool uses python and prior knowledge of L-systems
 and L-Py is needed to work with this tool. You can find the L-Py documentation at 
-'<https://lpy.readthedocs.io/en/latest>'
+<https://lpy.readthedocs.io/en/latest>
 
 ========
 Gallery
