@@ -3,6 +3,7 @@ Usage
 ======
 
 .. code-block:: bash
+
 		conda activate lpy
 		lpy
 
