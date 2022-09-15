@@ -19,4 +19,5 @@ Contents
    Home <self>
    installation
    usage
+   files
    

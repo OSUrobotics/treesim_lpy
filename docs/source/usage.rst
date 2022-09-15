@@ -2,7 +2,7 @@
 Usage
 ======
 
-.. code block:: bash
+.. code-block:: bash
 		conda activate lpy
 		lpy
 
