@@ -196,6 +196,7 @@ class BasicWood(ABC):
 #                max_length, tie_axis, bud_break_max_length, order, bud_break_prob_func)
     
 class Wire():
+  """ Defines a trellis wire in the 3D space """
   def __init__(self, id:int, point: tuple, axis: tuple):
     self.__id = id
     self.__axis = axis
@@ -207,7 +208,7 @@ class Wire():
     self.num_branch+=1 
   
 class Support():
-  """ All the details needed to figure out how the support is structured in the environment"""
+  """ All the details needed to figure out how the support is structured in the environment, it is a collection of wires"""
   def __init__(self, points: list, num_wires: int, spacing_wires: int, trunk_wire_pt: tuple,\
                 branch_axis: tuple, trunk_axis: tuple):
                   
