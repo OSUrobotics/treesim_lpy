@@ -1,3 +1,7 @@
+"""
+Defines the abstract class BasicWood, class Wire and class Support.
+"""
+
 from abc import abstractmethod
 from openalea.plantgl.all import *
 import copy
@@ -8,7 +12,6 @@ import random as rd
 import collections
 eps = 1e-6
 
-# Make these abstract classes 
 from abc import ABC, abstractmethod
 # class Tree():
 #   #branch_dict = {}
