@@ -1,5 +1,6 @@
 import random as rd
-
+import sys
+sys.path.append('../')
 from openalea.plantgl.all import *#Polyline2D, unitstep, freq
 from numpy import arange
 
@@ -23,7 +24,7 @@ curve_gui = False
 #Trunk guide variables
 L0 = 50
 freq = 30
-#rd.seed(0)
+rd.seed(83)
 order = 2
 branches = 0
 radius = 1
@@ -45,7 +46,7 @@ module B # represent apical meristem of lateral branches
 module I # Internode
 
 
-Axiom: A(1,0)
+Axiom: SetGuide(trunk, 21)A(1,0)
 
 derivation length: 50
 
@@ -56,7 +57,7 @@ A(t,o) :
      # simply produces a metamer and ages the apex
      if label:
 	     nproduce  SetColor(3)
-     nproduce SetGuide(gen_noise_branch(radius/100.,15),L0)I(1,0.05)
+     nproduce I(1,0.05)#SetGuide(gen_noise_branch(radius/100.,15),L0)I(1,0.05)
      if t%3 == 0:
        if label:
        	nproduce SetColor(5)@O(0.35)SetColor(2)
@@ -66,7 +67,7 @@ A(t,o) :
 	       branches+=1       
 	       nproduce [SetGuide(globals()["path_"+str(branches)],L0)&(270)B(0)]
        else:
-       	nproduce [SetGuide(gen_noise_branch3D(radius/100.,freq),L0)&(90)B(0)][SetGuide(gen_noise_branch(radius/100.,freq),L0)&(270)B(0)]
+       	nproduce [@R(1,0,0,0,0,-1)SetGuide(gen_noise_branch3D(radius/100.,freq),L0)&(90)B(0)]
        
      produce A(t+1,o)
        
@@ -106,38 +107,13 @@ __lpy_code_version__ = 1.1
 
 def __initialiseContext__(context):
 	import openalea.plantgl.all as pgl
-	path_1 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.504711, 0.00471101, 1),(-0.42379, 0.109959, 1),(-0.148971, -0.0376881, 1),(0.000632729, 0.018844, 1)]) , 
+	trunk = pgl.BezierCurve2D(	
+	    pgl.Point3Array([(-0.5, 0, 1),(-0.10805, 0.358828, 1),(-0.366037, 0.234293, 1),(-0.261847, 0.763555, 1)]) , 
 	    )
-	path_1.name = "path_1"
-	path_2 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.5, 0, 1),(-0.166667, 0, 1),(0.166667, 0, 1),(0.5, 0, 1)]) , 
-	    )
-	path_2.name = "path_2"
-	path_3 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.5, 0, 1),(-0.166667, 0, 1),(0.166667, 0, 1),(0.5, 0, 1)]) , 
-	    )
-	path_3.name = "path_3"
-	path_4 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.5, 0, 1),(-0.166667, 0, 1),(0.166667, 0, 1),(0.5, 0, 1)]) , 
-	    )
-	path_4.name = "path_4"
-	path_5 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.5, 0, 1),(-0.166667, 0, 1),(0.166667, 0, 1),(0.5, 0, 1)]) , 
-	    )
-	path_5.name = "path_5"
-	path_6 = pgl.NurbsCurve2D(	
-	    ctrlPointList = pgl.Point3Array([(-0.5, 0, 1),(-0.166667, 0, 1),(0.166667, 0, 1),(0.5, 0, 1)]) , 
-	    )
-	path_6.name = "path_6"
-	panel_0 = ({'name': 'Panel 1', 'active': True, 'visible': True},[('Curve2D',path_1),('Curve2D',path_2),('Curve2D',path_3),('Curve2D',path_4),('Curve2D',path_5),('Curve2D',path_6)])
+	trunk.name = "trunk"
+	panel_0 = ({'name': 'Panel 1', 'active': True, 'visible': True},[('Curve2D',trunk)])
 	parameterset = [panel_0,]
 	context["__functions__"] = []
-	context["__curves__"] = [('path_1',path_1),('path_2',path_2),('path_3',path_3),('path_4',path_4),('path_5',path_5),('path_6',path_6),]
+	context["__curves__"] = [('trunk',trunk),]
 	context["__parameterset__"] = parameterset
-	context["path_1"] = path_1
-	context["path_2"] = path_2
-	context["path_3"] = path_3
-	context["path_4"] = path_4
-	context["path_5"] = path_5
-	context["path_6"] = path_6
+	context["trunk"] = trunk
