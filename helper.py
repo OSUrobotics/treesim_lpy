@@ -1,9 +1,40 @@
 from openalea.plantgl.all import NurbsCurve
 from openalea.lpy import Lsystem, newmodule
 from random import uniform
+import numpy as np
 
 
-def amplitude(x): return 2
+def dist_sq(a, b):
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+
+
+def get_energy_mat(branches, arch):
+    num_branches = len(branches)
+    num_wires = len(list(arch.branch_supports.values()))
+    energy_matrix = np.ones((num_branches, num_wires)) * np.inf
+    for branch_id, branch in enumerate(branches):
+        if branch.has_tied:
+            continue
+        for wire_id, wire in arch.branch_supports.items():
+            if wire.num_branch >= 1:
+                continue
+            energy_matrix[branch_id][wire_id] = (dist_sq(wire.point, branch.end) + dist_sq(wire.point, branch.start)) / 2
+
+    return energy_matrix
+
+
+def decide_guide(energy_matrix, branches, arch, max_energy=None):
+
+    if not energy_matrix.size:
+        return
+
+    i_min, j_min = np.unravel_index(energy_matrix.argmin(), energy_matrix.shape)
+    if np.isinf(energy_matrix[i_min, j_min]) or (max_energy and energy_matrix[i_min, j_min] > max_energy):
+        return
+
+    if not branches[i_min].has_tied:
+        branches[i_min].guide_target = arch.branch_supports[j_min]
+        energy_matrix[i_min,:] = energy_matrix[:, j_min] = np.inf
 
 
 def cut_from(pruning_id, s, path=None):
@@ -11,6 +42,11 @@ def cut_from(pruning_id, s, path=None):
     s.insertAt(pruning_id, newmodule('F'))
     s.insertAt(pruning_id + 1, newmodule('%'))
     return s
+
+
+# Test utilities
+
+def amplitude(x): return 2
 
 
 def cut_using_string_manipulation(pruning_id, s, path=None):
@@ -87,3 +123,23 @@ def gen_noise_branch(radius, nbp=20):
                                                           myrandom(radius * amplitude(pt / float(nbp - 1))),
                                                           pt / float(nbp - 1), 1) for pt in range(2, nbp)],
         degree=min(nbp - 1, 3), stride=nbp * 100)
+
+
+def ed(a, b):
+    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
+
+
+def get_energy_mat(branches, arch):
+    num_branches = len(branches)
+    num_wires = len(list(arch.branch_supports.values()))
+    energy_matrix = np.ones((num_branches, num_wires)) * np.inf
+    # print(energy_matrix.shape)
+    for branch_id, branch in enumerate(branches):
+        if branch.has_tied:
+            continue
+        for wire_id, wire in arch.branch_supports.items():
+            if wire.num_branch >= 1:
+                continue
+            energy_matrix[branch_id][wire_id] = ed(wire.point, branch.end) / 2 + ed(wire.point,
+                                                                                    branch.start) / 2  # +v.num_branches*10+branch.bend_energy(deflection, curr_branch.age)
+    return energy_matrix

@@ -9,7 +9,7 @@ import random as rd
 import copy
 import gc
 import time
-from helper import *
+import helper
 
 class Spur(BasicWood):
   count = 0
@@ -127,38 +127,6 @@ support = Support(generate_points_ufo(), 7 , 1 , (21,0,3), (0,1,1), (0,1,1))
 num_iteration_tie = 5
 trunk_base.guide_target = support.trunk_wire
 ###Tying stuff begins
-    
-def ed(a,b):
-  return (a[0]-b[0])**2+(a[1]-b[1])**2+(a[2]-b[2])**2
-  
-def get_energy_mat(branches, arch):
-  num_branches = len(branches)
-  num_wires = len(list(arch.branch_supports.values()))
-  energy_matrix = np.ones((num_branches,num_wires))*np.inf
-  #print(energy_matrix.shape)
-  for branch_id, branch in enumerate(branches):
-    if branch.has_tied:
-      continue
-    for wire_id, wire in arch.branch_supports.items():
-      if wire.num_branch>=1:
-        continue
-      energy_matrix[branch_id][wire_id] = ed(wire.point,branch.end)/2+ed(wire.point,branch.start)/2#+v.num_branches*10+branch.bend_energy(deflection, curr_branch.age)
-  return energy_matrix
-
-def decide_guide(energy_matrix, branches, arch):
-  for i in range(energy_matrix.shape[0]):
-    min_arg = np.argwhere(energy_matrix == np.min(energy_matrix))
-    #print(min_arg)
-    if energy_matrix[min_arg[0][0]][min_arg[0][1]] == np.inf or energy_matrix[min_arg[0][0]][min_arg[0][1]] > 300 :
-      return
-    if not (branches[min_arg[0][0]].has_tied == True):# and not (arch.branch_supports[min_arg[0][1]].num_branch >=1):
-      #print("Imp:",min_arg[0][0], min_arg[0][1], energy_matrix[min_arg[0][0]][min_arg[0][1]])
-      branches[min_arg[0][0]].guide_target = arch.branch_supports[min_arg[0][1]]#copy.deepcopy(arch.branch_supports[min_arg[0][1]].point)
-      #trellis_wires.trellis_pts[min_arg[0][1]].num_branches+=1
-      for j in range(energy_matrix.shape[1]):
-        energy_matrix[min_arg[0][0]][j] = np.inf
-      for j in range(energy_matrix.shape[0]):
-        energy_matrix[j][min_arg[0][1]] = np.inf
 
 def tie(lstring):
   for j,i in enumerate(lstring):
@@ -194,9 +162,9 @@ def EndEach(lstring):
   if (getIterationNb()+1)%num_iteration_tie == 0:
     if support.trunk_wire :
       trunk_base.update_guide(trunk_base.guide_target) #Tie trunk one iteration before branches
-    energy_matrix = get_energy_mat(parent_child_dict[trunk_base.name], support)
+    energy_matrix = helper.get_energy_mat(parent_child_dict[trunk_base.name], support)
     print(energy_matrix)
-    decide_guide(energy_matrix, parent_child_dict[trunk_base.name], support)
+    helper.decide_guide(energy_matrix, parent_child_dict[trunk_base.name], support, max_energy=300)
     for branch in parent_child_dict[trunk_base.name]:
       branch.update_guide(branch.guide_target)
       print(branch.name, branch.guide_target)
@@ -212,7 +180,7 @@ def pruning_strategy(lstring): #Remove remnants of cut
     if i.name == 'C' and i[0].type.age > 8 and i[0].type.has_tied == False and i[0].type.cut == False:
       i[0].type.cut = True      
       print("Cutting", i[0].type.name) 
-      lstring = cut_from(j, lstring)
+      lstring = helper.cut_from(j, lstring)
       return True
   return False
   
