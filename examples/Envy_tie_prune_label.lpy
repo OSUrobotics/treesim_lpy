@@ -153,14 +153,16 @@ def pruning_strategy(lstring): #Remove remnants of cut
       lstring = helper.cut_from(j, lstring)
       return True
   return False
-  
+
+# Before applying the L-String rules, run this function
 def StartEach(lstring):
   global parent_child_dict
   for i in parent_child_dict[trunk_base.name]:
+    # Hack due to deflection not perfectly matching the desired intermediate target
 	  if i.tie_updated == False:
 	    i.tie_update()
     
-  
+# After applying 
 def EndEach(lstring):
   global parent_child_dict, support
   tied = False  
@@ -219,8 +221,12 @@ _(r) --> _(r+o.thickness_increment)
 
 homomorphism:
 
+# I = Internode, a = ??? (length?) , r = radius, o = object
+# F = the smallest segment you can make in L-py
+
 I(a,r,o) --> F(a,r)
-S(a,r,o) --> F(a,r)
+# Anywhere we have I defined in the strong, we want to convert a smallest segment
+# F is a primitive object that can be parsed by Lpy. I cannot be
 
 production:   
 Attractors(support):

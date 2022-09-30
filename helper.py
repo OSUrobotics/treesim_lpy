@@ -9,6 +9,10 @@ def dist_sq(a, b):
 
 
 def get_energy_mat(branches, arch):
+    # arch: Architecture (currently Support)
+    # summary: measures the "effort"/energy required to bend a branch towards a given target
+    # (will ignore wires already associated with a branch, and vice versa)
+
     num_branches = len(branches)
     num_wires = len(list(arch.branch_supports.values()))
     energy_matrix = np.ones((num_branches, num_wires)) * np.inf
