@@ -157,34 +157,43 @@ class BasicWood(ABC):
 
     def deflection_at_x(self, d, x, L):
         """d is the max deflection, x is the current location we need deflection on and L is the total length"""
-        return (d / 2) * (x ** 2) / (L ** 3 + 0.001) * (3 * L - x)
+        x_term = (x ** 2) / (L ** 3 + 0.001) * (3 * L - x)
+        if isinstance(x_term, np.ndarray):
+            return x_term.reshape(-1, 1) * (d/2).reshape(1, -1)
+        else:
+            return (d / 2) * x_term
 
     # return d*(1 - np.cos(*np.pi*x/(2*L))) #Axial loading
 
-    def get_control_points(self, target, start, current, tie_axis):
+    def get_control_points(self, final_target, start, current, tie_axis):
         pts = []
-        Lcurve = np.sqrt((start[0] - current[0]) ** 2 + (current[1] - start[1]) ** 2 + (current[2] - start[2]) ** 2)
-        print(Lcurve, start, current)
-        if Lcurve ** 2 - (target[0] - start[0]) ** 2 * tie_axis[0] - (target[1] - start[1]) ** 2 * tie_axis[1] - (
-                target[2] - start[2]) ** 2 * tie_axis[2] < 0:
+
+        final_target = np.array(final_target)
+        start = np.array(start)
+        current = np.array(current)
+        tie_axis = np.array(tie_axis)
+
+        curve_len = np.linalg.norm(start - current)
+
+        # [ALEX] What is the geometric operation being performed here?
+        if curve_len ** 2 - (final_target[0] - start[0]) ** 2 * tie_axis[0] - (final_target[1] - start[1]) ** 2 * tie_axis[1] - (
+                final_target[2] - start[2]) ** 2 * tie_axis[2] < 0:
             print("SHORT")
             return pts, None
 
         curve_end = np.sqrt(
-            Lcurve ** 2 - (target[0] - start[0]) * tie_axis[0] ** 2 - (target[1] - start[1]) * tie_axis[1] ** 2 - (
-                        target[2] - start[2]) * tie_axis[2] ** 2)
-        i_target = [target[0], target[1], target[2]]
-        for j, axis in enumerate(tie_axis):
-            if axis == 0:
-                i_target[j] = start[j] + target[j] / abs(target[j] + eps) * (curve_end)
-                break
-        dxyz = np.array(i_target) - np.array(current)
-        dx = np.array(current) - np.array(start)
-        for i in range(1, 10 * int(Lcurve) + 1):
-            x = i / (10 * int(Lcurve))
-            d = self.deflection_at_x(dxyz, x * Lcurve, Lcurve)
-            pts.append(tuple((start[0] + x * dx[0] + d[0], start[1] + x * dx[1] + d[1], start[2] + x * dx[2] + d[2])))
-        return pts, i_target
+            curve_len ** 2 - (final_target[0] - start[0]) * tie_axis[0] ** 2 - (final_target[1] - start[1]) * tie_axis[1] ** 2 - (
+                    final_target[2] - start[2]) * tie_axis[2] ** 2)
+
+        target = (tie_axis != 0) * final_target + (tie_axis == 0) * (start + curve_end * np.sign(final_target))
+        current_to_target = np.array(target) - np.array(current)
+        start_to_current = np.array(current) - np.array(start)
+
+        x_vals = np.linspace(0, 1, 10 * int(curve_len) + 1, endpoint=True)[1:]
+        deflections = self.deflection_at_x(current_to_target, x_vals * curve_len, curve_len)
+        pts = start + deflections + x_vals.reshape(-1, 1) * start_to_current.reshape(1, -1)
+
+        return map(tuple, pts), tuple(target)
 
 
 # class Branch(BasicWood):
