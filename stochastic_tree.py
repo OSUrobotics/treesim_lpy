@@ -145,7 +145,16 @@ class BasicWood(ABC):
             # print("DELETING", lstring[index+1])
             del (lstring[index + 1])
             remove_count += 1
-        lstring.insertAt(index + 1, 'SetGuide({}, {})'.format(spline.curve(), self.length))
+
+        # TODO: This spline has NaNs, figure out why
+        curve = spline.curve()
+        thing_len = self.length
+
+        print('DEBUGGGG')
+        print(curve)
+        print(thing_len)
+
+        lstring.insertAt(index + 1, 'SetGuide({}, {})'.format(curve, thing_len))
         return lstring, remove_count
 
     def tie_update(self):
@@ -164,6 +173,9 @@ class BasicWood(ABC):
 
     def get_control_points(self, final_target, start, current, wire_obj):
         pts = []
+
+        import pdb
+        pdb.set_trace()
 
         final_target = np.array(final_target)
         start = np.array(start)
@@ -224,6 +236,20 @@ class Architecture:
     def __setitem__(self, key, value):
         self._collection[key] = value
 
+    def get(self, *args, **kwargs):
+        return self._collection.get(*args, **kwargs)
+
+    @property
+    def attractor_grid(self):
+        pts = []
+        for _, v in self._collection.items():
+            if isinstance(v, list):
+                pts.extend(map(lambda x: np.array(x.end).astype(np.double), v))
+            else:
+                pts.append(np.array(v.end).astype(np.double))
+
+        return Point3Grid((1,1,1), pts)
+
 
 class WireVector:
 
@@ -241,6 +267,9 @@ class WireVector:
         self.ray = (self.end / self.start) / norm
         self.one_sided = one_sided
 
+        # TEMP - REDO LATER
+        self.num_branch = 0
+
     def compute_distance_and_closest_pt(self, pt):
         pt = np.array(pt)
 
@@ -251,6 +280,9 @@ class WireVector:
         closest_pt = self.start + (pt - self.start).dot(self.ray) * self.ray
         return np.linalg.norm(pt - closest_pt), closest_pt
 
+    # TEMP - REDO LATER
+    def add_branch(self):
+        self.num_branch += 1
 
 class Wire():
     """ Defines a trellis wire in the 3D space """

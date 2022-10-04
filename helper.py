@@ -8,25 +8,45 @@ def dist_sq(a, b):
     return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
 
 
-def get_energy_mat(branches, arch):
+def determine_branch_wire_pairing(branches, wires, max_energy=None, return_energy=False):
+    """
+    From a list of branches and wires, determines the indexes of the branch
+    and wire with the lowest energy to pair.
+    """
+
+    energy_matrix = get_energy_mat(branches, wires)
+    if not energy_matrix.size or (max_energy is not None and energy_matrix.min() > max_energy):
+        if return_energy:
+            return None, None, energy_matrix
+        return None, None
+
+    i_branch, i_wire = np.unravel_index(energy_matrix.argmin(), energy_matrix.shape)
+    assert not branches[i_branch].is_tied
+    
+    if return_energy:
+        return i_branch, i_wire, energy_matrix
+    return i_branch, i_wire
+
+
+def get_energy_mat(branches, wires):
     """
     Measures the energy required to bend a branch towards a given wire
     Will ignore energy costs for branches/wires that already have been paired
 
     :param branches: A list of Branch objects
-    :param arch: A list of Support objects
+    :param wires: A list of WireVector objects
     """
 
     num_branches = len(branches)
-    num_wires = len(list(arch.branch_supports.values()))
+    num_wires = len(wires)
     energy_matrix = np.ones((num_branches, num_wires)) * np.inf
     for branch_id, branch in enumerate(branches):
         if branch.has_tied:
             continue
-        for wire_id, wire in arch.branch_supports.items():
+        for wire_id, wire in enumerate(wires):
             if wire.num_branch >= 1:
                 continue
-            energy_matrix[branch_id][wire_id] = (dist_sq(wire.point, branch.end) + dist_sq(wire.point, branch.start)) / 2
+            energy_matrix[branch_id][wire_id] = (dist_sq(wire.end, branch.end) + dist_sq(wire.end, branch.start)) / 2
 
     return energy_matrix
 
@@ -136,23 +156,3 @@ def gen_noise_branch(radius, nbp=20):
                                                           myrandom(radius * amplitude(pt / float(nbp - 1))),
                                                           pt / float(nbp - 1), 1) for pt in range(2, nbp)],
         degree=min(nbp - 1, 3), stride=nbp * 100)
-
-
-def ed(a, b):
-    return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2
-
-
-def get_energy_mat(branches, arch):
-    num_branches = len(branches)
-    num_wires = len(list(arch.branch_supports.values()))
-    energy_matrix = np.ones((num_branches, num_wires)) * np.inf
-    # print(energy_matrix.shape)
-    for branch_id, branch in enumerate(branches):
-        if branch.has_tied:
-            continue
-        for wire_id, wire in arch.branch_supports.items():
-            if wire.num_branch >= 1:
-                continue
-            energy_matrix[branch_id][wire_id] = ed(wire.point, branch.end) / 2 + ed(wire.point,
-                                                                                    branch.start) / 2  # +v.num_branches*10+branch.bend_energy(deflection, curr_branch.age)
-    return energy_matrix
