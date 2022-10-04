@@ -9,9 +9,13 @@ def dist_sq(a, b):
 
 
 def get_energy_mat(branches, arch):
-    # arch: Architecture (currently Support)
-    # summary: measures the "effort"/energy required to bend a branch towards a given target
-    # (will ignore wires already associated with a branch, and vice versa)
+    """
+    Measures the energy required to bend a branch towards a given wire
+    Will ignore energy costs for branches/wires that already have been paired
+
+    :param branches: A list of Branch objects
+    :param arch: A list of Support objects
+    """
 
     num_branches = len(branches)
     num_wires = len(list(arch.branch_supports.values()))
@@ -28,6 +32,11 @@ def get_energy_mat(branches, arch):
 
 
 def decide_guide(energy_matrix, branches, arch, max_energy=None):
+    """
+    From a given energy matrix, determine the branch-wire pair with the minimum energy.
+    Modifies the branch in place to point to the branch support
+    """
+
 
     if not energy_matrix.size:
         return
