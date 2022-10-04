@@ -3,7 +3,7 @@ Tying, Pruning and lablelling UFO architecture trees
 """
 import sys
 sys.path.append('../')
-from stochastic_tree import Support, BasicWood
+from stochastic_tree import Support, BasicWood, Architecture, WireVector
 import numpy as np
 import random as rd
 import copy
@@ -109,23 +109,21 @@ basicwood_prototypes['spur'] = Spur(tie_axis = (0,1,1), max_length = 1, thicknes
 trunk_base = Trunk(copy_from = basicwood_prototypes['trunk'])
 time_count = 0
 
-def generate_points_ufo():
-    x = np.arange(3, 24, 3).astype(float)
-    z = np.full((7,), 21).astype(float)
-    y = np.full((7,), 0).astype(float)
-    pts = []
-    id = 0
-    for i in range(x.shape[0]):
-        pts.append((x[i], y[i], z[i]))
-        id+=1
-
-    return pts
 
 
 
-support = Support(generate_points_ufo(), 7 , 1 , (21,0,3), (0,1,1), (0,1,1))
+
+# Define the architecture
+x_pts = (np.arange(7) + 1) * 3
+arch = Architecture()
+arch['trunk'] = WireVector((0,0,3), (21, 0, 3), one_sided=False)
+trunk_base.update_guide(arch['trunk'])
+for x in x_pts:
+    arch.add_item('leader', WireVector((x,0,0), (x,0,21)))
+
+# support = Support(generate_points_ufo(), 7 , 1 , (21,0,3), (0,1,1), (0,1,1))
 num_iteration_tie = 5
-trunk_base.guide_target = support.trunk_wire
+# trunk_base.guide_target = support.trunk_wire
 ###Tying stuff begins
 
 def tie(lstring):

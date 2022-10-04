@@ -2,12 +2,12 @@
 Defines the abstract class BasicWood, class Wire and class Support.
 """
 
-from abc import abstractmethod
 from openalea.plantgl.all import *
 import copy
 import numpy as np
 from openalea.plantgl.scenegraph.cspline import CSpline
 import random as rd
+from collections import defaultdict
 
 import collections
 
@@ -120,15 +120,12 @@ class BasicWood(ABC):
         # self.max_length/2, self.tie_axis, self.bud_break_max_length/2, self.order+1, self.bud_break_prob_func)
 
     def update_guide(self, guide_target):
-        curve = []
         self.guide_target = guide_target
         if self.guide_target == -1:
             return
-        if self.has_tied == False:
-            curve, i_target = self.get_control_points(self.guide_target.point, self.start, self.end, self.tie_axis)
-        else:
-            curve, i_target = self.get_control_points(self.guide_target.point, self.last_tie_location, self.end,
-                                                      self.tie_axis)
+        start = self.last_tie_location if self.has_tied else self.start
+        assert isinstance(guide_target, WireVector)
+        curve, i_target = self.get_control_points(guide_target.end, start, self.end, guide_target)
         if i_target:
             self.guide_points.extend(curve)
             # print(i_target, self.guide_points[-1])
@@ -165,27 +162,22 @@ class BasicWood(ABC):
 
     # return d*(1 - np.cos(*np.pi*x/(2*L))) #Axial loading
 
-    def get_control_points(self, final_target, start, current, tie_axis):
+    def get_control_points(self, final_target, start, current, wire_obj):
         pts = []
 
         final_target = np.array(final_target)
         start = np.array(start)
         current = np.array(current)
-        tie_axis = np.array(tie_axis)
 
         curve_len = np.linalg.norm(start - current)
 
-        # [ALEX] What is the geometric operation being performed here?
-        if curve_len ** 2 - (final_target[0] - start[0]) ** 2 * tie_axis[0] - (final_target[1] - start[1]) ** 2 * tie_axis[1] - (
-                final_target[2] - start[2]) ** 2 * tie_axis[2] < 0:
+        # Compute the closest point on the wire to the final target
+        # Check if the segment is close enough to be able to reach
+        dist_to_wire, target = wire_obj.compute_distance_and_closest_pt(final_target)
+        if dist_to_wire > curve_len:
             print("SHORT")
             return pts, None
 
-        curve_end = np.sqrt(
-            curve_len ** 2 - (final_target[0] - start[0]) * tie_axis[0] ** 2 - (final_target[1] - start[1]) * tie_axis[1] ** 2 - (
-                    final_target[2] - start[2]) * tie_axis[2] ** 2)
-
-        target = (tie_axis != 0) * final_target + (tie_axis == 0) * (start + curve_end * np.sign(final_target))
         current_to_target = np.array(target) - np.array(current)
         start_to_current = np.array(current) - np.array(start)
 
@@ -212,6 +204,54 @@ class BasicWood(ABC):
 #      super().__init__(num_buds_segment, bud_break_prob, thickness, thickness_increment, growth_length,\
 #                max_length, tie_axis, bud_break_max_length, order, bud_break_prob_func)
 
+class Architecture:
+    """
+    Defines a collection of WireVectors sorted into different categories.
+    """
+
+    def __init__(self):
+        self._collection = defaultdict(list)
+
+    def add_item(self, category, item, to_list=True):
+        if to_list:
+            self._collection[category].append(item)
+        else:
+            self._collection[category] = item
+
+    def __getitem__(self, item):
+        return self._collection[item]
+
+    def __setitem__(self, key, value):
+        self._collection[key] = value
+
+
+class WireVector:
+
+    def __init__(self, start, end, one_sided=True):
+        """
+        Represents a wire as a vector with an origin at start that passes through end.
+        If one_sided is True, any point that is "behind" the start will be measured with respect to the start.
+        """
+
+        self.start = np.array(start)
+        self.end = np.array(end)
+        norm = np.linalg.norm(self.start - self.end)
+        if np.linalg.norm(self.start - self.end) < 1e-6:
+            raise ValueError('Start and end for the wire are too close!')
+        self.ray = (self.end / self.start) / norm
+        self.one_sided = one_sided
+
+    def compute_distance_and_closest_pt(self, pt):
+        pt = np.array(pt)
+
+        # For a one-sided wire, check to make sure the point is a positive distance in the ray direction
+        if self.one_sided and (pt - self.start).dot(self.ray) < 0:
+            return np.linalg.norm(pt - self.start), self.start
+
+        closest_pt = self.start + (pt - self.start).dot(self.ray) * self.ray
+        return np.linalg.norm(pt - closest_pt), closest_pt
+
+
 class Wire():
     """ Defines a trellis wire in the 3D space """
 
@@ -224,6 +264,8 @@ class Wire():
 
     def add_branch(self):
         self.num_branch += 1
+
+
 
 
 class Support():
