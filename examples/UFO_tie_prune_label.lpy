@@ -3,7 +3,8 @@ Tying, Pruning and lablelling UFO architecture trees
 """
 import sys
 sys.path.append('../')
-from stochastic_tree import Support, BasicWood, Architecture, WireVector
+from stochastic_tree import BasicWood
+from architecture import Architecture, WireVector
 import numpy as np
 import random as rd
 import copy
@@ -121,11 +122,9 @@ trunk_base.update_guide(arch['trunk'])
 for x in x_pts:
     arch.add_item('leader', WireVector((x,0,0), (x,0,21)))
 
-# support = Support(generate_points_ufo(), 7 , 1 , (21,0,3), (0,1,1), (0,1,1))
 num_iteration_tie = 5
-# trunk_base.guide_target = support.trunk_wire
-###Tying stuff begins
 
+###Tying stuff begins
 def tie(lstring):
     for j,i in enumerate(lstring):
         if (i == 'C' and i[0].type.__class__.__name__ == 'Branch') or i == 'T' :
