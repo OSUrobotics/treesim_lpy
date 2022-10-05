@@ -174,9 +174,6 @@ class BasicWood(ABC):
     def get_control_points(self, final_target, start, current, wire_obj):
         pts = []
 
-        import pdb
-        pdb.set_trace()
-
         final_target = np.array(final_target)
         start = np.array(start)
         current = np.array(current)
@@ -196,6 +193,8 @@ class BasicWood(ABC):
         x_vals = np.linspace(0, 1, 10 * int(curve_len) + 1, endpoint=True)[1:]
         deflections = self.deflection_at_x(current_to_target, x_vals * curve_len, curve_len)
         pts = start + deflections + x_vals.reshape(-1, 1) * start_to_current.reshape(1, -1)
+
+        print('DEBUGGING: {}'.format(deflections))
 
         return map(tuple, pts), tuple(target)
 
@@ -264,7 +263,7 @@ class WireVector:
         norm = np.linalg.norm(self.start - self.end)
         if np.linalg.norm(self.start - self.end) < 1e-6:
             raise ValueError('Start and end for the wire are too close!')
-        self.ray = (self.end / self.start) / norm
+        self.ray = (self.end - self.start) / norm
         self.one_sided = one_sided
 
         # TEMP - REDO LATER

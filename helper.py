@@ -21,7 +21,7 @@ def determine_branch_wire_pairing(branches, wires, max_energy=None, return_energ
         return None, None
 
     i_branch, i_wire = np.unravel_index(energy_matrix.argmin(), energy_matrix.shape)
-    assert not branches[i_branch].is_tied
+    assert not branches[i_branch].has_tied
     
     if return_energy:
         return i_branch, i_wire, energy_matrix
