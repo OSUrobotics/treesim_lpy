@@ -146,15 +146,7 @@ class BasicWood(ABC):
             del (lstring[index + 1])
             remove_count += 1
 
-        # TODO: This spline has NaNs, figure out why
-        curve = spline.curve()
-        thing_len = self.length
-
-        print('DEBUGGGG')
-        print(curve)
-        print(thing_len)
-
-        lstring.insertAt(index + 1, 'SetGuide({}, {})'.format(curve, thing_len))
+        lstring.insertAt(index + 1, 'SetGuide({}, {})'.format(spline.curve(), self.length))
         return lstring, remove_count
 
     def tie_update(self):
@@ -193,8 +185,6 @@ class BasicWood(ABC):
         x_vals = np.linspace(0, 1, 10 * int(curve_len) + 1, endpoint=True)[1:]
         deflections = self.deflection_at_x(current_to_target, x_vals * curve_len, curve_len)
         pts = start + deflections + x_vals.reshape(-1, 1) * start_to_current.reshape(1, -1)
-
-        print('DEBUGGING: {}'.format(deflections))
 
         return map(tuple, pts), tuple(target)
 
