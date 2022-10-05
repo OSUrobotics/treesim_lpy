@@ -22,8 +22,7 @@ class BasicWood(ABC):
 
     def __init__(self, copy_from=None, max_buds_segment: int = 5, thickness: float = 0.1,
                  thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7.,
-                 tie_axis: tuple = (0, 1, 1), order: int = 0, color: int = 0, name: str = None):  # ,\
-        # bud_break_prob_func: "Function" = lambda x,y: rd.random()):
+                 order: int = 0, color: int = 0):
 
         # Location variables
         if copy_from:
@@ -37,7 +36,6 @@ class BasicWood(ABC):
         self.guide_points = []
         self.current_tied = False
         self.guide_target = None
-        self.tie_axis = tie_axis
         self.tie_updated = True
         # Information Variables
         self.__length = 0
@@ -93,10 +91,7 @@ class BasicWood(ABC):
     def create_branch(self) -> "BasicWood Object":
         """Returns how a new order branch when bud break happens will look like if a bud break happens"""
         pass
-        # new_object = BasicWood.clone(self.branch_object)
-        # return new_object
-        # return BasicWood(self.num_buds_segment/2, self.bud_break_prob, self.thickness/2, self.thickness_increment/2, self.growth_length/2,\
-        # self.max_length/2, self.tie_axis, self.bud_break_max_length/2, self.order+1, self.bud_break_prob_func)
+
 
     def update_guide(self, guide_target: Optional[StructuralElement]):
         """

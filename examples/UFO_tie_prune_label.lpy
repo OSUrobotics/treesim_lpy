@@ -1,5 +1,5 @@
 """
-Tying, Pruning and lablelling UFO architecture trees
+Tying, Pruning and labeling UFO architecture trees
 """
 import sys
 sys.path.append('../')
@@ -16,9 +16,9 @@ class Spur(BasicWood):
     count = 0
     def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
                  thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 1, prototype_dict: dict = {}, name = None, color = None):
+                 order: int = 1, prototype_dict: dict = {}, name = None, color = None):
         super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis,  order, color)
+                         max_length, order, color)
         if copy_from:
             self.__copy_constructor__(copy_from)
         else:
@@ -40,10 +40,10 @@ class Branch(BasicWood):
     count = 0
     def __init__(self, copy_from = None,  max_buds_segment: int = 5, thickness: float = 0.1, \
                  thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 1, prototype_dict: dict = {}, name = None, color = None):
+                 order: int = 1, prototype_dict: dict = {}, name = None, color = None):
 
         super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis,  order, color)
+                         max_length, order, color)
         if copy_from:
             self.__copy_constructor__(copy_from)
         else:
@@ -68,10 +68,10 @@ class Trunk(BasicWood):
     """ Details of the trunk while growing a tree, length, thickness, where to attach them etc """
     def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
                  thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 0, prototype_dict: dict = {}, name = None, color = None):
+                 order: int = 0, prototype_dict: dict = {}, name = None, color = None):
 
         super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis,  order, color)
+                         max_length, order, color)
         if copy_from:
             self.__copy_constructor__(copy_from)
         else:
@@ -102,9 +102,9 @@ class Trunk(BasicWood):
 #Pass transition probabs? --> solve with abstract classes
 
 basicwood_prototypes = {}
-basicwood_prototypes['trunk'] = Trunk(tie_axis = (0,1,1), max_length = 20, thickness_increment = 0.01, prototype_dict = basicwood_prototypes, color = 0)
-basicwood_prototypes['branch'] = Branch(tie_axis = (1,1,0), max_length = 20, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 1)
-basicwood_prototypes['spur'] = Spur(tie_axis = (0,1,1), max_length = 1, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 2)
+basicwood_prototypes['trunk'] = Trunk(max_length = 20, thickness_increment = 0.01, prototype_dict = basicwood_prototypes, color = 0)
+basicwood_prototypes['branch'] = Branch(max_length = 20, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 1)
+basicwood_prototypes['spur'] = Spur(max_length = 1, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 2)
 
 #init  
 trunk_base = Trunk(copy_from = basicwood_prototypes['trunk'])
