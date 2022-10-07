@@ -197,42 +197,41 @@ module grow_object
 module bud
 module branch
 module C
-Axiom: Attractors(arch)GetPos(trunk_base.start)T(ParameterSet(type = trunk_base))&(270)/(0)grow_object(trunk_base)GetPos(trunk_base.end)
+Axiom: Attractors(arch)@GcGetPos(trunk_base.start)T(ParameterSet(type = trunk_base))&(270)grow_object(trunk_base)GetPos(trunk_base.end)@Ge
 derivation length: 50
 
 production:
 #Decide whether branch internode vs trunk internode need to be the same size.
-grow_object(o) :
-    if o == None:
+grow_object(ob) :
+    if ob is None:
         produce *
-    if o.length >= o.max_length:
+    if ob.length >= ob.max_length:
         nproduce *
     else:
-        o.grow_one()
+        ob.grow_one()
         if label:
-            nproduce SetColor(o.color)
-        produce I(o.growth_length, o.thickness, o)bud(ParameterSet(type = o, num_buds = 0))grow_object(o)
+            nproduce SetColor(ob.color)
+        produce I(ob.growth_length, ob.thickness, ob)bud(ParameterSet(type = ob, num_buds = 0))grow_object(ob)
 
-bud(t) :
-    if t.type.is_bud_break(t.num_buds):
-        new_object = t.type.create_branch()
-        if new_object == None:
+bud(wood) :
+    if wood.type.is_bud_break(wood.num_buds):
+        new_object = wood.type.create_branch()
+        if new_object is None:
             produce *
         parent_child_dict[new_object.name] = []
-        parent_child_dict[t.type.name].append(new_object)
+        parent_child_dict[wood.type.name].append(new_object)
         #Store new object somewhere
-        t.num_buds+=1
-        t.type.num_branches+=1
-        nproduce [@RGetPos(new_object.start)C(ParameterSet(type = new_object))/(rd.random()*360)&(rd.random()*90)grow_object(new_object)GetPos(new_object.end)]bud(t)
+        wood.num_buds+=1
+        wood.type.num_branches+=1
+        nproduce [@Gc@RGetPos(new_object.start)C(ParameterSet(type = new_object))/(rd.random()*360)&(rd.random()*90)grow_object(new_object)GetPos(new_object.end)@Ge]bud(wood)
 
 
 I(s,r,o) --> I(s,r+o.thickness_increment, o)
-_(r) --> _(r+o.thickness_increment)
+
 
 homomorphism:
 
 I(a,r,o) --> F(a,r)
-S(a,r,o) --> F(a,r)
 
 production:
 Attractors(arch):
