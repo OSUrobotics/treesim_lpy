@@ -58,6 +58,11 @@ class BasicWood(ABC):
             setattr(self, k, v)
         # self.__dict__.update(update_dict)
 
+    def __repr__(self):
+        return '{}<({:.2f},{:.2f},{:.2f}), ({:.2f},{:.2f},{:.2f})>'.format(
+            self.__class__.__name__, *self.start, *self.end
+        )
+
     @abstractmethod
     def is_bud_break(self) -> bool:
         """This method defines if a bud will break or not -> returns true for yes, false for not. Input can be any variables"""

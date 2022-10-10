@@ -70,6 +70,11 @@ class WireVector(StructuralElement):
         # TEMP - REDO LATER
         self.num_branch = 0
 
+    def __repr__(self):
+        return '{}<({:.2f},{:.2f},{:.2f}), ({:.2f},{:.2f},{:.2f})>'.format(
+            self.__class__.__name__, *self.start, *self.end
+        )
+
     def bend_segment_curve(self, branch_start, branch_end):
         """
         Given a branch segment with the specified start and end points along with a target wire,
