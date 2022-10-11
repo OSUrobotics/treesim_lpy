@@ -5,6 +5,7 @@ import sys
 sys.path.append('../')
 from stochastic_tree import BasicWood
 from architecture import Architecture, WireVector
+import operators
 import numpy as np
 import random as rd
 import copy
@@ -13,19 +14,8 @@ import time
 import helper
 
 class Spur(BasicWood):
-    count = 0
-    def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 order: int = 1, prototype_dict: dict = {}, name = None, color = None):
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Spur.count+=1
+
+    COUNT = 0
 
     def is_bud_break(self, num_buds_segment):
         return (rd.random() < 0.1)
@@ -37,48 +27,22 @@ class Spur(BasicWood):
         pass
 
 class Branch(BasicWood):
-    count = 0
-    def __init__(self, copy_from = None,  max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 order: int = 1, prototype_dict: dict = {}, name = None, color = None):
 
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Branch.count+=1
+    COUNT = 0
 
     def is_bud_break(self, num_buds_segment):
         return (rd.random() < 0.1*(1 - num_buds_segment/self.max_buds_segment))
 
     def create_branch(self):
-        new_ob =  Spur(copy_from = self.prototype_dict['spur'])
+        new_ob = Spur(max_length = 1, thickness_increment = 0.005, color = 2)
         return new_ob
 
     def grow(self):
         pass
 
 class Trunk(BasicWood):
-    count = 0
-    """ Details of the trunk while growing a tree, length, thickness, where to attach them etc """
-    def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 order: int = 0, prototype_dict: dict = {}, name = None, color = None):
 
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Trunk.count+=1
+    COUNT = 0
 
     def is_bud_break(self, num_buds_segment):
         if (rd.random() > 0.1*(1 - num_buds_segment/self.max_buds_segment)):
@@ -89,29 +53,17 @@ class Trunk(BasicWood):
         if self.length < 5:
             return None
         if rd.random() > 0.8:
-            return Spur(copy_from = self.prototype_dict['spur'])
+            return Spur(max_length = 1, thickness_increment = 0.005, color = 2)
         else:
-            return Branch(copy_from = self.prototype_dict['branch'])
+            return Branch(max_length = 20, thickness_increment = 0.005, color = 1, can_tie=True)
 
     def grow(self):
         pass
 
 
-
-
-#Pass transition probabs? --> solve with abstract classes
-
-basicwood_prototypes = {}
-basicwood_prototypes['trunk'] = Trunk(max_length = 20, thickness_increment = 0.01, prototype_dict = basicwood_prototypes, color = 0)
-basicwood_prototypes['branch'] = Branch(max_length = 20, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 1)
-basicwood_prototypes['spur'] = Spur(max_length = 1, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 2)
-
 #init  
-trunk_base = Trunk(copy_from = basicwood_prototypes['trunk'])
+trunk_base = Trunk(max_length = 20, thickness_increment = 0.01, color = 0, can_tie=True)
 time_count = 0
-
-
-
 
 
 # Define the architecture
@@ -124,23 +76,6 @@ for x in x_pts:
 
 num_iteration_tie = 5
 
-###Tying stuff begins
-def tie(lstring):
-    for j,i in enumerate(lstring):
-        if (i == 'C' and i[0].type.__class__.__name__ == 'Branch') or i == 'T' :
-            if i[0].type.tie_updated == False:
-                continue
-            curr = i[0]
-            if i[0].type.guide_points:
-                # print("tying ", i[0].type.name, i[0].type.guide_target.point)
-                i[0].type.tie_updated = False
-                i[0].type.guide_target.add_branch()
-                lstring, count = i[0].type.tie_lstring(lstring, j)
-
-                return True
-    return False
-
-
 def StartEach(lstring):
     global parent_child_dict, arch, trunk_base
     trunk_wire = arch.get('trunk', None)
@@ -152,7 +87,6 @@ def StartEach(lstring):
     for i in parent_child_dict[trunk_base.name]:
         if i.tie_updated == False:
             i.tie_update()
-
 
 def EndEach(lstring):
     global parent_child_dict, arch
@@ -167,11 +101,12 @@ def EndEach(lstring):
         i_branch, i_wire = helper.determine_branch_wire_pairing(branches, arch['leader'], max_energy=300)
         if i_branch is not None:
             branches[i_branch].guide_target = arch['leader'][i_wire]
+            arch['leader'][i_wire].add_branch()
 
         for branch in parent_child_dict[trunk_base.name]:
             branch.update_guide(branch.guide_target)
             print(branch.name, branch.guide_target)
-        while tie(lstring):
+        while operators.tie_all(lstring):
             pass
         while pruning_strategy(lstring):
             pass

@@ -13,24 +13,22 @@ from abc import ABC, abstractmethod
 
 class BasicWood(ABC):
 
-    @staticmethod
-    def clone(obj):
-        try:
-            return copy.deepcopy(obj)
-        except copy.Error:
-            raise copy.Error(f'Not able to copy {obj}') from None
+    COUNT = 0
 
-    def __init__(self, copy_from=None, max_buds_segment: int = 5, thickness: float = 0.1,
+    @classmethod
+    def copy_from(cls, obj):
+        kwargs = copy.deepcopy(obj.__dict__)
+        return cls(**kwargs)
+
+    def __init__(self, max_buds_segment: int = 5, thickness: float = 0.1,
                  thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7.,
-                 order: int = 0, color: int = 0):
+                 order: int = 0, color: int = 0, can_tie=False, name=None):
 
         # Location variables
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-            return
         self.start = Vector3(0, 0, 0)
         self.end = Vector3(0, 0, 0)
         # Tying variables
+        self.can_tie = can_tie
         self.last_tie_location = Vector3(0, 0, 0)
         self.has_tied = False
         self.guide_points = []
@@ -51,16 +49,15 @@ class BasicWood(ABC):
         self.thickness_increment = thickness_increment
         self.growth_length = growth_length
         self.max_length = max_length
+        if not name:
+            self.name = f'{self.__class__.__name__}{self.__class__.COUNT}'
 
-    def __copy_constructor__(self, copy_from):
-        update_dict = copy.deepcopy(copy_from.__dict__)
-        for k, v in update_dict.items():
-            setattr(self, k, v)
-        # self.__dict__.update(update_dict)
+        self.__class__.COUNT += 1
+
 
     def __repr__(self):
         return '{}<({:.2f},{:.2f},{:.2f}), ({:.2f},{:.2f},{:.2f})>'.format(
-            self.__class__.__name__, *self.start, *self.end
+            self.name, *self.start, *self.end
         )
 
     @abstractmethod
@@ -112,24 +109,16 @@ class BasicWood(ABC):
         if curve is not None:
             self.guide_points.extend(map(tuple, curve))
 
-    def tie_lstring(self, lstring, index):
-        spline = CSpline(self.guide_points)
-        # print(lstring[index+1].name in ['&','/','SetGuide'], lstring[index+1])
-        remove_count = 0
-        if not self.has_tied:
-            if lstring[index + 1].name in ['&', '/', 'SetGuide']:
-                # print("DELETING", lstring[index+1])
-                del (lstring[index + 1])
-                remove_count += 1
-            self.has_tied = True
-        if lstring[index + 1].name in ['&', '/', 'SetGuide']:
-            # print("DELETING", lstring[index+1])
-            del (lstring[index + 1])
-            remove_count += 1
+    def produce_tie_guide(self):
+        if not self.can_tie:
+            return None
 
-        lstring.insertAt(index + 1, 'SetGuide({}, {})'.format(spline.curve(), self.length))
-        return lstring, remove_count
+        spline = CSpline(self.guide_points)
+        elem = f'SetGuide({spline.curve()}, {self.length})'
+        return elem
 
     def tie_update(self):
+        if not self.can_tie:
+            raise ValueError('Cannot update the tie for a branch which cannot be tied!')
         self.last_tie_location = copy.deepcopy(self.end)
         self.tie_updated = True
