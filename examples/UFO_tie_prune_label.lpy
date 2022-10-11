@@ -113,12 +113,15 @@ def EndEach(lstring):
     return lstring
 
 def pruning_strategy(lstring): #Remove remnants of cut
-    cut = False
-    for j,i in enumerate(lstring):
-        if i.name == 'C' and i[0].type.age > 8 and i[0].type.has_tied == False and i[0].type.cut == False:
-            i[0].type.cut = True
-            print("Cutting", i[0].type.name)
-            lstring = helper.cut_from(j, lstring)
+
+    for idx, lsys_elem in enumerate(lstring):
+        if lsys_elem.name != 'C':
+            continue
+        wood = lsys_elem[0].type
+        if wood.age > 8 and not wood.has_tied and not wood.cut:
+            wood.cut = True
+            print("Cutting", wood.name)
+            helper.cut_from(idx, lstring)
             return True
     return False
 
@@ -153,6 +156,10 @@ bud(wood) :
         new_object = wood.type.create_branch()
         if new_object is None:
             produce *
+
+        if isinstance(wood.type, Branch) and isinstance(new_object, Spur):
+            nproduce [SetColor(0,0,255)@O(0.3)]
+
         parent_child_dict[new_object.name] = []
         parent_child_dict[wood.type.name].append(new_object)
         #Store new object somewhere
