@@ -20,4 +20,6 @@ Contents
    installation
    usage
    files
+   resources
+   methods
    

@@ -4,5 +4,7 @@ __pycache__
 .*
 *.obj
 *.ply
+*.x3d
+dataset_maker/dataset/*
 #*
 build/

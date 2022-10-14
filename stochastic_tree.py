@@ -160,12 +160,12 @@ class BasicWood(ABC):
   def get_control_points(self, target, start, current, tie_axis):
     pts = []
     Lcurve = np.sqrt((start[0]-current[0])**2 + (current[1]-start[1])**2 + (current[2]-start[2])**2)   
-    print(Lcurve, start, current)
+    #print(Lcurve, start, current)
     if Lcurve**2 - (target[0]-start[0])**2*tie_axis[0] - (target[1]-start[1])**2*tie_axis[1] - (target[2]-start[2])**2*tie_axis[2]  < 0:
-      print("SHORT")
+      #print("SHORT")
       return pts,None
 
-    curve_end = np.sqrt(Lcurve**2 - (target[0]-start[0])*tie_axis[0]**2-(target[1]-start[1])*tie_axis[1]**2 - (target[2]-start[2])*tie_axis[2]**2)
+    curve_end = np.sqrt(Lcurve**2 - (target[0]-start[0])**2*tie_axis[0]-(target[1]-start[1])**2*tie_axis[1] - (target[2]-start[2])**2*tie_axis[2])
     i_target = [target[0], target[1], target[2]]
     for j,axis in enumerate(tie_axis):
       if axis == 0:
