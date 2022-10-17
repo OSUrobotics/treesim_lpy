@@ -12,22 +12,11 @@ import time
 import helper
 
 class Spur(BasicWood):
-    count = 0
-    def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 1, prototype_dict: dict = {}, name = None, color = None):
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis,  order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Spur.count+=1
+
+    COUNT = 0
 
     def is_bud_break(self, num_buds_segment):
-        return (rd.random() < 0.1)
+        return rd.random() < 0.1
 
     def create_branch(self):
         return None
@@ -36,48 +25,23 @@ class Spur(BasicWood):
         pass
 
 class Branch(BasicWood):
-    count = 0
-    def __init__(self, copy_from = None,  max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 1, prototype_dict: dict = {}, name = None, color = None):
 
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis, order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Branch.count+=1
+    COUNT = 0
 
     def is_bud_break(self, num_buds_segment):
-        return (rd.random() < 0.2*(1 - num_buds_segment/self.max_buds_segment))
+        return rd.random() < 0.2 * (1 - num_buds_segment / self.max_buds_segment)
 
     def create_branch(self):
-        new_ob =  Spur(copy_from = self.prototype_dict['spur'])
-        return new_ob
+        return Spur(max_length = 1, thickness_increment = 0.005, color = 2)
 
     def grow(self):
         pass
 
 class Trunk(BasicWood):
-    count = 0
-    """ Details of the trunk while growing a tree, length, thickness, where to attach them etc """
-    def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1, \
-                 thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7., \
-                 tie_axis: tuple = (0,1,1), order: int = 0, prototype_dict: dict = {}, name = None, color = None):
 
-        super().__init__(copy_from, max_buds_segment,thickness, thickness_increment, growth_length, \
-                         max_length, tie_axis,  order, color)
-        if copy_from:
-            self.__copy_constructor__(copy_from)
-        else:
-            self.prototype_dict = prototype_dict
-        if not name:
-            self.name = str(self.__class__.__name__) +'_'+ str(self.__class__.count)
-        Trunk.count+=1
+    COUNT = 0
+
+    """ Details of the trunk while growing a tree, length, thickness, where to attach them etc """
 
     def is_bud_break(self, num_buds_segment):
         if (rd.random() > 0.2*(1 - num_buds_segment/self.max_buds_segment)):
@@ -86,25 +50,16 @@ class Trunk(BasicWood):
 
     def create_branch(self):
         if rd.random() > 0.8:
-            return Spur(copy_from = self.prototype_dict['spur'])
+            return Spur(max_length = 1, thickness_increment = 0.005, color = 2)
         else:
-            return Branch(copy_from = self.prototype_dict['branch'])
+            return Branch(max_length = 20, thickness_increment = 0.005, color = 1, can_tie=True)
 
     def grow(self):
         pass
 
 
-
-
-#Pass transition probabs? --> solve with abstract classes
-
-basicwood_prototypes = {}
-basicwood_prototypes['trunk'] = Trunk(tie_axis = (0,1,1), max_length = 20, thickness_increment = 0.02, prototype_dict = basicwood_prototypes, color = 0)
-basicwood_prototypes['branch'] = Branch(tie_axis = (0,1,1), max_length = 20, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 1)
-basicwood_prototypes['spur'] = Spur(tie_axis = (0,1,1), max_length = 1, thickness_increment = 0.005, prototype_dict = basicwood_prototypes, color = 2)
-
 #init  
-trunk_base = Trunk(copy_from = basicwood_prototypes['trunk'])
+trunk_base = Trunk(max_length = 20, thickness_increment = 0.02, color = 0, can_tie=True)
 time_count = 0
 label = True
 def generate_points_v_trellis():

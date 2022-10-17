@@ -12,57 +12,76 @@ import copy
 import gc
 import time
 import helper
+import scheduler
+from scipy.stats import poisson
 
 class Spur(BasicWood):
 
     COUNT = 0
 
-    def is_bud_break(self, num_buds_segment):
-        return (rd.random() < 0.1)
+    def get_branch_growth_on_segment(self, start, end):
+        return []
 
-    def create_branch(self):
-        return None
-
-    def grow(self):
-        pass
 
 class Branch(BasicWood):
 
     COUNT = 0
 
-    def is_bud_break(self, num_buds_segment):
-        return (rd.random() < 0.1*(1 - num_buds_segment/self.max_buds_segment))
+    def get_branch_growth_on_segment(self, start, end):
+        branches = []
+        n_spurs = poisson((end - start) * 0.1).rvs()
+        positions = np.sort(np.random.uniform(0, end-start, n_spurs))
+        for pos in positions:
+            spur = Spur(thickness_schedule=scheduler.ExponentialScheduler(0.5, 1.0, 1.0, True),
+                        length_schedule=scheduler.ExponentialScheduler(0.005, 0.01, 1.0, True),
+                        color=2)
+            branches.append((pos, spur))
 
-    def create_branch(self):
-        new_ob = Spur(max_length = 1, thickness_increment = 0.005, color = 2)
-        return new_ob
+        return branches
 
-    def grow(self):
-        pass
 
 class Trunk(BasicWood):
 
     COUNT = 0
 
-    def is_bud_break(self, num_buds_segment):
-        if (rd.random() > 0.1*(1 - num_buds_segment/self.max_buds_segment)):
-            return False
-        return True
-
-    def create_branch(self):
+    def get_branch_growth_on_segment(self, start, end):
         if self.length < 5:
-            return None
-        if rd.random() > 0.8:
-            return Spur(max_length = 1, thickness_increment = 0.005, color = 2)
-        else:
-            return Branch(max_length = 20, thickness_increment = 0.005, color = 1, can_tie=True)
+            return []
 
-    def grow(self):
-        pass
+        branches = []
+        spurs = poisson(0.8 * 0.2 * (end - start)).rvs()
+        leaders = poisson(0.2 * 0.2 * (end - start)).rvs()
+
+        print('DEL: {}'.format(end - start))
+        print('START: {}'.format(start))
+        print('END: {}'.format(end))
+        print('SPURS: {}'.format(spurs))
+        print('LEADERS: {}'.format(leaders))
+
+        for _ in range(spurs):
+            spur = Spur(
+                thickness_schedule=scheduler.ExponentialScheduler(0.5, 1.0, 1.0, True),
+                length_schedule=scheduler.ExponentialScheduler(0.005, 0.01, 1.0, True),
+                color=2
+            )
+            branches.append((np.random.uniform(0, start), spur))
+
+        for _ in range(leaders):
+            leader = Branch(
+                thickness_schedule=scheduler.ExponentialScheduler(0.015, 0.03, 1.0, True),
+                length_schedule=scheduler.LinearScheduler(1, 20, 19, bound_end=True),
+                color = 1, can_tie=True
+            )
+            branches.append((np.random.uniform(0, end-start), leader))
+
+        return branches
 
 
 #init  
-trunk_base = Trunk(max_length = 20, thickness_increment = 0.01, color = 0, can_tie=True)
+trunk_base = Trunk(
+    length_schedule=scheduler.LinearScheduler(1, 20, 19, bound_end=True),
+    thickness_schedule=scheduler.ExponentialScheduler(0.05, 0.20, k=4, as_half_life=True),
+    color = 0, can_tie=True)
 time_count = 0
 
 
@@ -75,6 +94,12 @@ for x in x_pts:
     arch.add_item('leader', WireVector((x,0,0), (x,0,21)))
 
 num_iteration_tie = 5
+MAX_SEG_LEN = 0.5
+SHOW_JOINTS = True
+
+def End(lstring, geometries):
+    print(geometries)
+    print(dir(geometries))
 
 def StartEach(lstring):
     global parent_child_dict, arch, trunk_base
@@ -132,6 +157,7 @@ label = True
 #Tie trunk
 module Attractors
 module grow_object
+module produce_buds
 module bud
 module branch
 module C
@@ -141,38 +167,38 @@ derivation length: 50
 production:
 #Decide whether branch internode vs trunk internode need to be the same size.
 grow_object(ob) :
-    if ob is None:
-        produce *
-    if ob.length >= ob.max_length:
-        nproduce *
-    else:
-        ob.grow_one()
-        if label:
-            nproduce SetColor(ob.color)
-        produce I(ob.growth_length, ob.thickness, ob)bud(ParameterSet(type = ob, num_buds = 0))grow_object(ob)
+    len_change, new_branches = ob.grow_one()
+    new_branches.sort(key=lambda x: x[0])
+    cur_pos = 0
+    if label:
+        nproduce SetColor(ob.color)
 
-bud(wood) :
-    if wood.type.is_bud_break(wood.num_buds):
-        new_object = wood.type.create_branch()
-        if new_object is None:
-            produce *
+    for pos, new_obj in new_branches:
 
-        if isinstance(wood.type, Branch) and isinstance(new_object, Spur):
-            nproduce [SetColor(0,0,255)@O(0.3)]
+        print('PRODUCING {}'.format(new_obj))
 
-        parent_child_dict[new_object.name] = []
-        parent_child_dict[wood.type.name].append(new_object)
-        #Store new object somewhere
-        wood.num_buds+=1
-        wood.type.num_branches+=1
-        nproduce [@Gc@RGetPos(new_object.start)C(ParameterSet(type = new_object))/(rd.random()*360)&(rd.random()*90)grow_object(new_object)GetPos(new_object.end)@Ge]bud(wood)
+        pos_del = pos - cur_pos
+        nproduce I(pos_del, ob.thickness, ob)
+        if SHOW_JOINTS and (isinstance(ob, Branch) and isinstance(new_obj, Spur)):
+            nproduce[SetColor(0, 0, 255) @ O(0.3)]
+        nproduce bud(ParameterSet(type=new_obj))
+        cur_pos = pos
+        # Bookkeeping
+        parent_child_dict[new_obj.name] = []
+        parent_child_dict[ob.name].append(new_obj)
+        ob.num_branches += 1
+
+    nproduce I(len_change - cur_pos, ob.thickness, ob)
+    produce grow_object(ob)
+
+bud(param_set):
+    wood = param_set.type
+    produce [@Gc@RGetPos(wood.start)C(ParameterSet(type = wood))/(rd.random()*360)&(rd.random()*90)grow_object(wood)GetPos(wood.end)@Ge]
 
 
-I(s,r,o) --> I(s,r+o.thickness_increment, o)
-
+I(s,r,o) --> I(s,o.thickness, o)
 
 homomorphism:
-
 I(a,r,o) --> F(a,r)
 
 production:
