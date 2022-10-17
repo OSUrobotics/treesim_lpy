@@ -23,7 +23,7 @@ def convert_scene_to_mesh(scene, file_path=None):
             faces = rez.indexList
 
             c = scene_obj.appearance.ambient
-            color = np.array([c.red, c.blue, c.green]) / 255.0
+            color = np.array([c.red, c.green, c.blue]) / 255.0
             base_idx = len(vertices)
 
             for pt in pts:
