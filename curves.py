@@ -111,115 +111,289 @@ class OGH(HermiteCurve):
 def normalize(vec):
     return vec / np.linalg.norm(vec)
 
-def run_curve_strain_opt(all_pts, start_vector, spring_constant=1.0):
-    # Attempts to find a curve that minimizes the energy of a curve that starts at the start point with the given
-    # vector and passes through the target points.
+def unpack_cubic_bezier_opt_params(params, all_pts):
+    dim = len(all_pts[0])
+    num_pts = len(all_pts)
+    control_points = params.reshape(-1, dim)
+    curve_params = []
+    for i in range(num_pts - 1):
+        last_pt = all_pts[i]
+        next_pt = all_pts[i + 1]
+        lead_control = control_points[i]
+        next_control = 2 * all_pts[i + 1] - control_points[i + 1] if i < num_pts - 2 else all_pts[i + 1]
+        curve_params.append((last_pt, lead_control, next_control, next_pt))
+
+    return curve_params
+
+def run_cubic_bezier_strain_opt(all_pts, start_vector, spring_constant=1.0, curve_eval=201, max_opt=None, start_guess=None):
 
     start_vector = normalize(start_vector)
     dim = len(start_vector)
     num_pts = len(all_pts)
 
-    if dim == 2:
-        def deparametrize(u):
-            return np.array([np.cos(u), np.sin(u)])
-        def parametrize(vec):
-            vec = normalize(vec)
-            return np.arctan2(vec[1], vec[0])
-    elif dim == 3:
-        def deparametrize(u, v):
-            return np.array([np.sin(u) * np.cos(v), np.sin(u) * np.sin(v), np.cos(u)])
-        def parametrize(vec):
-            vec = normalize(vec)
-            return np.array([np.arccos(vec[2]), np.sign(vec[1]) * np.arccos(vec[0] / np.linalg.norm(vec[:2]))])
-    else:
-        raise NotImplementedError()
-
-    def opt_func(params, invalid_val=1e8):
-        # Vec is len (num_pts + 1) * (dim - 1)
+    def opt_func(vec):
+        control_points = vec.reshape(-1, dim)
         total_energy = 0
-        all_vecs = [deparametrize(*params[i * (dim - 1):(i+1) * (dim-1)]) for i in range(num_pts)]
+        for curve_params in unpack_cubic_bezier_opt_params(vec, all_pts):
+            curve = CubicBezier(*curve_params)
+            ts = np.linspace(0, 1, curve_eval)
+            pts = curve(ts)
+            deriv = curve.deriv(ts)
+            second_deriv = curve.second_deriv(ts)
 
-        for i in range(len(all_vecs) - 1):
-            curve = OGH(all_pts[i], all_vecs[i], all_pts[i + 1], all_vecs[i + 1])
-            if curve.a0 < 0 or curve.a1 < 0:
-                return invalid_val
-            total_energy += curve.strain
+            cross_product = np.abs(np.cross(deriv, second_deriv))
+            if dim == 3:
+                cross_product = np.linalg.norm(cross_product, axis=1)
+            kappa = np.nan_to_num(cross_product / (np.linalg.norm(deriv, axis=1) ** 3))
+            energy = np.sum(np.linalg.norm(pts[:-1] - pts[1:], axis=1) * kappa[1:] ** 2)
+            total_energy += energy
 
-        start_angle_diff = np.arccos(start_vector.dot(all_vecs[0]))
-        total_energy += 0.5 * spring_constant * start_angle_diff ** 2
+        start_control_vec = normalize(control_points[0] - all_pts[0])
+        angle_diff = np.arccos(np.clip(start_vector.dot(start_control_vec), -1, 1))
+        total_energy += 0.5 * spring_constant * angle_diff ** 2
 
         return total_energy
 
-    init_guesses = []
-    for i, target_pt in enumerate(all_pts):
-        if i == 0:
-            init_guesses.append(start_vector)
-            continue
-        last_pt = all_pts[i-1]
-        next_pt = all_pts[i+1] if i < len(all_pts) - 1 else target_pt
-        init_guesses.append(normalize(next_pt - last_pt))
-    start_guess = np.array([parametrize(guess) for guess in init_guesses]).flatten()
-    print('Start val: {:.4f}'.format(opt_func(start_guess)))
+    # Assemble the start guess
+    if start_guess is None:
+        start_guesses = []
+        for i in range(num_pts - 1):
 
-    rez = opt.minimize(opt_func, start_guess, bounds=[(-2*np.pi, 2*np.pi)] * len(start_guess))
-    final_vecs = [deparametrize(*rez.x[i * (dim - 1):(i+1) * (dim-1)]) for i in range(num_pts)]
+            pt = all_pts[i]
+            next_pt = all_pts[i + 1]
+            dist = np.linalg.norm(next_pt - pt)
 
-    print('Final val: {:.4f}'.format(opt_func(rez.x)))
+            if i == 0:
+                vec = normalize(start_vector)
+            else:
+                last_pt = all_pts[i - 1]
+                vec = normalize(next_pt - last_pt)
+            start_guesses.append(vec * dist / 3)
+        start_guess = np.array(start_guesses).flatten()
 
-    return final_vecs, init_guesses
+    print('Start val: {:.3f}'.format(opt_func(start_guess)))
+    options = {}
+    if max_opt is not None:
+        options['maxiter'] = max_opt
+    rez = opt.minimize(opt_func, start_guess, method='Nelder-Mead', options=options)
+    if not rez.success:
+        print('Warning! Optimization did not succeed.\nMessage: {}'.format(rez.message))
+    print('Final val: {:.3f}'.format(opt_func(rez.x)))
+
+    return unpack_cubic_bezier_opt_params(rez.x, all_pts), unpack_cubic_bezier_opt_params(start_guess, all_pts), rez
+
+
+
+# TESTING FUNCTIONS
+def curve_opt_test_2d():
+    # targets = np.array([[0,0], [5,2], [2.5,5]])
+    targets = np.array([[0, 0], [3, 2], [6, 5]])
+    start_vec = normalize(np.array([3, 1]))
+    k = 10.0
+    init_guess = run_cubic_bezier_strain_opt(targets, start_vec, 1)[2].x
+
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatch
+    from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
+
+    fig, ax = plt.subplots()
+    num_curves = len(targets) - 1
+    plots = []
+    arrows = []
+    for _ in range(num_curves):
+        plot, = ax.plot([], [], color='red')
+        plots.append(plot)
+        for _ in range(2):
+            arrow = mpatch.FancyArrowPatch((-5, -5), (-10, -10))
+            ax.add_patch(arrow)
+            arrows.append(arrow)
+
+    def init():
+        pt_mins = targets.min(axis=0)
+        pt_maxs = targets.max(axis=0)
+        ax.set_xlim(pt_mins[0] - 2, pt_maxs[0] + 2)
+        ax.set_ylim(pt_mins[1] - 2, pt_maxs[1] + 2)
+        ax.add_patch(
+            mpatch.FancyArrowPatch(targets[0], targets[0] + normalize(start_vec) * 2, color='red', arrowstyle='->'))
+
+        ax.scatter(targets[:, 0], targets[:, 1], marker='*')
+
+    def update(frame):
+        k = frame / 2
+        opt_curves, _, opt = run_cubic_bezier_strain_opt(targets, start_vec, k, start_guess=init_guess)
+        ts = np.linspace(0, 1, 101)
+
+        all_ctrls = []
+
+        for curve_params, plot in zip(opt_curves, plots):
+            curve = CubicBezier(*curve_params)
+            pts = curve(ts)
+            plot.set_data(pts[:, 0], pts[:, 1])
+            ax.set_title('k={:.1f}, Energy={:.2f}'.format(k, opt.fun))
+            all_ctrls.extend([(curve.p0, curve.p1), (curve.p3, curve.p2)])
+
+        for arrow, ctrl in zip(arrows, all_ctrls):
+            arrow.set_positions(*ctrl)
+
+    ani = FuncAnimation(fig, update, frames=np.arange(100), init_func=init)
+    ani.save('curve_opt_test.gif', PillowWriter(fps=5))
+
+
+def curve_opt_test_3d():
+    # targets = np.array([[0, 0, 0], [3, 1.5, 2], [1.5, -1.5, 5]])
+    targets = np.array([[0, 0, 0], [3, 0.5, 2], [6, 0.25, 5]])
+    start_vec = normalize(np.array([3, -0.1, 1]))
+    init_guess = run_cubic_bezier_strain_opt(targets, start_vec, 1)[2].x
+
+    from mpl_toolkits.mplot3d import axes3d, proj3d
+    from mpl_toolkits.mplot3d.proj3d import proj_transform
+
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatch
+    from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter
+
+    class Arrow3D(mpatch.FancyArrowPatch):
+
+        def __init__(self, x, y, z, dx, dy, dz, *args, **kwargs):
+            super().__init__((0, 0), (0, 0), *args, **kwargs)
+            self._xyz = (x, y, z)
+            self._dxdydz = (dx, dy, dz)
+
+        def draw(self, renderer):
+            x1, y1, z1 = self._xyz
+            dx, dy, dz = self._dxdydz
+            x2, y2, z2 = (x1 + dx, y1 + dy, z1 + dz)
+
+            xs, ys, zs = proj_transform((x1, x2), (y1, y2), (z1, z2), self.axes.M)
+            self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
+            super().draw(renderer)
+
+        def do_3d_projection(self, renderer=None):
+            x1, y1, z1 = self._xyz
+            dx, dy, dz = self._dxdydz
+            x2, y2, z2 = (x1 + dx, y1 + dy, z1 + dz)
+
+            xs, ys, zs = proj_transform((x1, x2), (y1, y2), (z1, z2), self.axes.M)
+            self.set_positions((xs[0], ys[0]), (xs[1], ys[1]))
+
+            return np.min(zs)
+
+        def set_positions_3d(self, x, y, z, dx, dy, dz):
+            self._xyz = (x, y, z)
+            self._dxdydz = (dx, dy, dz)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    num_curves = len(targets) - 1
+    plots = []
+    projection_plots = []
+    projection_plots_xz = []
+    arrows = []
+    for _ in range(num_curves):
+        plot, = ax.plot([], [], [], color='red')
+        plots.append(plot)
+
+        proj_plot, = ax.plot([], [], [], color='grey', linestyle='dashed')
+        projection_plots.append(proj_plot)
+
+        proj_plot_xz, = ax.plot([], [], [], color='grey', linestyle='dashed')
+        projection_plots_xz.append(proj_plot_xz)
+
+        for _ in range(2):
+            arrow = Arrow3D(*(-5, -5, -10), *(-10, -10, -10))
+            ax.add_patch(arrow)
+            arrows.append(arrow)
+
+    def init():
+        pt_mins = targets.min(axis=0)
+        pt_maxs = targets.max(axis=0)
+        ax.set_xlim(pt_mins[0] - 0.5, pt_maxs[0] + 0.5)
+        ax.set_ylim(pt_mins[1] - 0.5, pt_maxs[1] + 0.5)
+        ax.set_zlim(pt_mins[2] - 0.5, pt_maxs[2] + 0.5)
+        ax.add_patch(
+            Arrow3D(*targets[0], *normalize(start_vec) * 2, color='red', arrowstyle='->'))
+
+        ax.scatter(targets[:, 0], targets[:, 1], targets[:, 2], marker='*')
+        ax.scatter(targets[:, 0], targets[:, 1], targets[:, 2] * 0, marker='*', color='grey')
+
+    def update(frame):
+        k = frame / 2
+        opt_curves, _, opt = run_cubic_bezier_strain_opt(targets, start_vec, k, start_guess=init_guess)
+        ts = np.linspace(0, 1, 101)
+
+        all_ctrls = []
+
+        for curve_params, plot, proj_plot, proj_plot_xz, in zip(opt_curves, plots, projection_plots, projection_plots_xz):
+            curve = CubicBezier(*curve_params)
+            pts = curve(ts)
+            plot.set_data_3d(pts[:, 0], pts[:, 1], pts[:, 2])
+            proj_plot.set_data_3d(pts[:, 0], pts[:,1], np.zeros(pts.shape[0]))
+            proj_plot_xz.set_data_3d(pts[:, 0], np.ones(pts.shape[0]) * ax.get_ylim()[1] , pts[:,2])
+            ax.set_title('k={:.1f}, Energy={:.2f}'.format(k, opt.fun))
+            all_ctrls.extend([(curve.p0, curve.p1), (curve.p3, curve.p2)])
+
+        for arrow, ctrl in zip(arrows, all_ctrls):
+            start, end = ctrl
+            arrow.set_positions_3d(*start, *end - start)
+
+    ani = FuncAnimation(fig, update, frames=np.arange(30), init_func=init)
+    ani.save('curve_opt_test.gif', PillowWriter(fps=5))
+
+
 
 
 
 if __name__ == '__main__':
+    curve_opt_test_3d()
 
-    # pts = np.array([[0,0], [5,1], [2,5]])
-    # start_vec = normalize(np.array([1,2]))
-    # k = 1.0
+
     #
-    # final_vecs, init_guesses = run_curve_strain_opt(pts, start_vec, k)
     #
-    # import matplotlib.pyplot as plt
     #
-    # for i in range(len(pts) - 1):
-    #     # curve = OGH(pts[i], init_guesses[i], pts[i+1], init_guesses[i+1])
-    #     curve = OGH(pts[i], final_vecs[i], pts[i+1], final_vecs[i+1])
-    #     curve_pts = curve.eval()
-    #     plt.plot(curve_pts[:,0], curve_pts[:,1])
     #
-    # import pdb
-    # pdb.set_trace()
+    # opt_curves, start_curves = run_cubic_bezier_strain_opt(targets, start_vec, k, max_opt=10000)
+    # ts = np.linspace(0, 1, 101)
+    # for curve_params in opt_curves:
+    #     curve = CubicBezier(*curve_params)
+    #     pts = curve(ts)
+    #     plt.plot(pts[:,0], pts[:,1])
+    #     plt.arrow(x=curve.p0[0], y=curve.p0[1], dx=(curve.p1 - curve.p0)[0], dy=(curve.p1 - curve.p0)[1], linestyle='dashed')
+    #     plt.arrow(x=curve.p3[0], y=curve.p3[1], dx=(curve.p2 - curve.p3)[0], dy=(curve.p2 - curve.p3)[1], linestyle='dashed')
     #
-    # plt.scatter(pts[:,0], pts[:,1], color='red')
-    # plt.arrow(x=pts[0][0], y=pts[0][1], dx=start_vec[0], dy=start_vec[1])
+    # plt.scatter(targets[:,0], targets[:,1], color='red')
+    # plt.arrow(x=targets[0][0], y=targets[0][1], dx=start_vec[0], dy=start_vec[1], color='red')
     #
-    # for pt, vec, init_guess in zip(pts, final_vecs, init_guesses):
-    #     plt.arrow(x=pt[0], y=pt[1], dx=vec[0], dy=vec[1], color='blue', linestyle='solid')
-    #     plt.arrow(x=pt[0], y=pt[1], dx=init_guess[0], dy=init_guess[1], color='red', linestyle='dashed')
     # plt.axis('equal')
     # plt.show()
+    #
+    #
 
-    ctrl_points = [np.array(x) for x in [
-        (0, 0), (1, 2), (2,-2), (3, 0)
-        # (0, 0), (1, 3), (2, 3), (3, 0)
-        # (0, 0), (0.1, 0.1), (0.9, 0.9), (1, 1)
-    ]]
 
-    curve = CubicBezier(*ctrl_points)
-    ts = np.linspace(0, 1, 101)
-    pts = curve(ts)
-    deriv = curve.deriv(ts)
-    second_deriv = curve.second_deriv(ts)
 
-    kappa = np.abs(np.cross(deriv, second_deriv)) / (np.linalg.norm(deriv, axis=1) ** 3)
-    normalized = (kappa - kappa.min()) / (kappa.max() - kappa.min())
 
-    total = np.sum(np.linalg.norm(pts[:-1] - pts[1:], axis=1) * kappa[1:] ** 2)
 
-    import matplotlib.pyplot as plt
-    import matplotlib.cm as cm
-
-    colors = cm.rainbow(normalized)
-    plt.plot(pts[:,0], pts[:,1])
-    plt.scatter(pts[:,0], pts[:,1], color=colors)
-    plt.title('Total energy: {:.2f}'.format(total))
-    plt.show()
+    # ctrl_points = [np.array(x) for x in [
+    #     (0, 0), (1, 2), (2,-2), (3, 0)
+    #     # (0, 0), (1, 3), (2, 3), (3, 0)
+    #     # (0, 0), (0.1, 0.1), (0.9, 0.9), (1, 1)
+    # ]]
+    #
+    # curve = CubicBezier(*ctrl_points)
+    # ts = np.linspace(0, 1, 101)
+    # pts = curve(ts)
+    # deriv = curve.deriv(ts)
+    # second_deriv = curve.second_deriv(ts)
+    #
+    # kappa = np.abs(np.cross(deriv, second_deriv)) / (np.linalg.norm(deriv, axis=1) ** 3)
+    # normalized = (kappa - kappa.min()) / (kappa.max() - kappa.min())
+    #
+    # total = np.sum(np.linalg.norm(pts[:-1] - pts[1:], axis=1) * kappa[1:] ** 2)
+    #
+    # import matplotlib.pyplot as plt
+    # import matplotlib.cm as cm
+    #
+    # colors = cm.rainbow(normalized)
+    # plt.plot(pts[:,0], pts[:,1])
+    # plt.scatter(pts[:,0], pts[:,1], color=colors)
+    # plt.title('Total energy: {:.2f}'.format(total))
+    # plt.show()
