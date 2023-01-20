@@ -2,6 +2,7 @@ from stochastic_tree import BasicWood
 import numpy as np
 import networkx as nx
 import openalea.lpy as lpy
+import openalea.plantgl.all as plantgl
 
 def extract_skeleton_from_lstring(lstring, node_modules, internode_modules):
 
@@ -13,15 +14,16 @@ def extract_skeleton_from_lstring(lstring, node_modules, internode_modules):
     stack = []
     for module in lstring:
         name = module.name
+        pid = id(module)
         if name in node_modules:
             module_id = module.args[0]
             assert module_id not in final_graph
-            final_graph.add_node(module_id, name=name, attribs=module.args[1:])
+            final_graph.add_node(module_id, name=name, pid=pid, attribs=module.args[1:])
             if last_node is not None:
                 final_graph.add_edge(last_node, module_id, **queued_edge)
             last_node = module_id
         elif name in internode_modules:
-            queued_edge = {'name': name, 'attribs': module.args}
+            queued_edge = {'name': name, 'pid': pid, 'attribs': module.args}
         elif name == '[':
             stack.append(last_node)
         elif name == ']':
