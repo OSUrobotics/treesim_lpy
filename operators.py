@@ -4,6 +4,16 @@ import networkx as nx
 import openalea.lpy as lpy
 import openalea.plantgl.all as plantgl
 
+
+class Counter:
+    def __init__(self):
+        self.val = 0
+
+    def __call__(self, *args, **kwargs):
+        cur_val = self.val
+        self.val += 1
+        return cur_val
+
 def extract_skeleton_from_lstring(lstring, node_modules, internode_modules):
 
     final_graph = nx.DiGraph()
@@ -12,6 +22,9 @@ def extract_skeleton_from_lstring(lstring, node_modules, internode_modules):
     queued_edge = {}
 
     stack = []
+    bid_counter = Counter()
+    bid = bid_counter()
+
     for module in lstring:
         name = module.name
         pid = id(module)
@@ -23,11 +36,12 @@ def extract_skeleton_from_lstring(lstring, node_modules, internode_modules):
                 final_graph.add_edge(last_node, module_id, **queued_edge)
             last_node = module_id
         elif name in internode_modules:
-            queued_edge = {'name': name, 'pid': pid, 'attribs': module.args}
+            queued_edge = {'name': name, 'pid': pid, 'attribs': module.args, 'branch_id': bid}
         elif name == '[':
-            stack.append(last_node)
+            stack.append((last_node, bid))
+            bid = bid_counter()
         elif name == ']':
-            last_node = stack.pop()
+            last_node, bid = stack.pop()
 
     return final_graph
 
