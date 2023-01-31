@@ -143,6 +143,7 @@ def extract_bendable_branches(graph):
                 'upstream': upstream,
                 'length': total_len,
                 'points': pts,
+                'type': graph.edges[nodes_from_last_tie[0], nodes_from_last_tie[1]]['name']
             }
     
     return bendable_branch_info
