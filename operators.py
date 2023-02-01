@@ -5,6 +5,67 @@ import openalea.lpy as lpy
 import openalea.plantgl.all as plantgl
 
 
+class TreeStructure:
+    def __init__(self, graph: nx.DiGraph):
+
+        self.validate_graph(graph)
+        self.graph = graph
+        self.info = self.extract_graph_metadata(self.graph)
+
+    def validate_graph(self, graph):
+        assert isinstance(graph, nx.DiGraph)
+
+    def extract_graph_metadata(self, graph=None):
+        if graph is None:
+            graph = self.graph
+
+        info = {}
+
+        return info
+
+
+
+    @classmethod
+    def from_lstring(cls, lstring, node_modules, internode_modules):
+        final_graph = nx.DiGraph()
+
+        last_node = None
+        queued_edge = {}
+
+        stack = []
+        bid_counter = Counter()
+        bid = bid_counter()
+
+        for module in lstring:
+            name = module.name
+            pid = id(module)
+            if name in node_modules:
+                module_id = module.args[0]
+                assert module_id not in final_graph
+                final_graph.add_node(module_id, name=name, pid=pid, attribs=module.args[1:])
+                if last_node is not None:
+                    final_graph.add_edge(last_node, module_id, **queued_edge)
+                last_node = module_id
+            elif name in internode_modules:
+                queued_edge = {'name': name, 'pid': pid, 'attribs': module.args, 'branch_id': bid}
+            elif name == '[':
+                stack.append((last_node, bid))
+                bid = bid_counter()
+            elif name == ']':
+                last_node, bid = stack.pop()
+
+        return cls(final_graph)
+
+
+
+
+
+
+
+
+
+
+
 class Counter:
     def __init__(self):
         self.val = 0
