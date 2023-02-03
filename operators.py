@@ -3,6 +3,8 @@ import numpy as np
 import networkx as nx
 import openalea.lpy as lpy
 import openalea.plantgl.all as plantgl
+import functools
+from openalea.plantgl.scenegraph.cspline import CSpline
 
 
 class TreeStructure:
@@ -11,6 +13,13 @@ class TreeStructure:
         self.validate_graph(graph)
         self.graph = graph
         self.info = self.extract_graph_metadata(self.graph)
+        self._branches = None
+
+    @property
+    def branches(self):
+        if self._branches is None:
+            self._branches = self.extract_branches()
+        return self._branches
 
     def validate_graph(self, graph):
         assert isinstance(graph, nx.DiGraph)
@@ -28,6 +37,88 @@ class TreeStructure:
 
         return info
 
+    def extract_branches(self):
+        bids = {self.graph.edges[e]['branch_id'] for e in self.graph.edges}
+        all_branches = {}
+        for bid in bids:
+            all_edges = [e for e in self.graph.edges if self.graph.edges[e]['branch_id'] == bid]
+            starts, ends = zip(*all_edges)
+            starts = set(starts)
+            ends = set(ends)
+            start_nodes = starts - ends
+            end_nodes = ends - starts
+            assert len(start_nodes) == 1 and len(end_nodes) == 1
+            mapping = dict(all_edges)
+            node = list(start_nodes)[0]
+            branch_nodes = []
+            while node is not None:
+                branch_nodes.append(node)
+                node = mapping.get(node, None)
+
+
+            # Extract metadata for each branch
+            data = {}
+            data['nodes'] = branch_nodes
+
+            # Length
+            pts = np.array([self.graph.nodes[n]['position'] for n in branch_nodes if isinstance(n, int)])
+            data['points'] = pts
+            data['length'] = np.sum(np.linalg.norm(pts[1:] - pts[:-1], axis=1))
+            all_branches[bid] = data
+
+        # Get branch generation
+        @functools.lru_cache(maxsize=None)
+        def gen_search(bid):
+            start_node = all_branches[bid]['nodes'][0]
+            preds = list(self.graph.predecessors(start_node))
+            if not preds:
+                return 0
+            else:
+                return gen_search(self.graph.edges[preds[0], start_node]['branch_id']) + 1
+
+        for bid in all_branches:
+            all_branches[bid]['generation'] = gen_search(bid)
+
+        return all_branches
+
+
+    def search_branches(self, attrib, cond, value, assert_unique=False):
+        if cond == '<':
+            func = lambda x: x[attrib] < value
+        elif cond == '=':
+            func = lambda x: x[attrib] == value
+        elif cond == '>':
+            func = lambda x: x[attrib] > value
+        else:
+            raise ValueError()
+        bids = [bid for bid in self.branches if func(self.branches[bid])]
+        if assert_unique:
+            assert len(bids) == 1
+            return bids[0]
+        return bids
+
+
+    def set_guide_on_nodes(self, nodes, points):
+        length = np.sum(np.linalg.norm(points[:-1] - points[1:], axis=1))
+        diff = np.linalg.norm(self.graph.nodes[nodes[0]]['position'] - points[0])
+        if diff > 1e-3:
+            print('[WARNING] Attempting to set a curve guide that is not close to the recorded start.')
+        for i, edge in enumerate(zip(nodes[:-1], nodes[1:])):
+            if i == 0:
+                self.graph.edges[edge]['pre_turtle_modules'] = [('SetGuide', [CSpline(points).curve(), length])]
+                # print('[{}] {}'.format(node, self.graph.nodes[node]['pre_turtle_modules']))
+            else:
+                self.graph.edges[edge]['pre_turtle_modules'] = []
+
+            if i == len(nodes) - 1:
+                self.graph.edges[edge]['post_turtle_modules'] = [('EndGuide', [])]
+            else:
+                self.graph.edges[edge]['post_turtle_modules'] = []
+
+
+    def set_node_attributes(self, mapping, name=None):
+        nx.set_node_attributes(self.graph, mapping, name=name)
+
     def to_lstring(self):
 
         def explore(edge):
@@ -37,16 +128,16 @@ class TreeStructure:
 
             while edge is not None:
 
-
-
                 data = self.graph.edges[edge]
+                queued_modules.extend(data.get('pre_turtle_modules', []))
                 queued_modules.extend(data.get('pre_modules', []))
                 queued_modules.append((data['name'], data['args']))
                 queued_modules.extend(data.get('post_modules', []))
+                queued_modules.extend(data.get('post_turtle_modules', []))
 
                 node_info = self.graph.nodes[edge[1]]
                 if node_info['name']:
-                    queued_modules.append(self.graph.nodes[edge[1]])
+                    queued_modules.append((node_info['name'], node_info.get('args', [])))
 
                 next_edge = None
                 for node in self.graph.successors(edge[1]):
@@ -71,23 +162,39 @@ class TreeStructure:
         modules.extend(explore(first_edge))
         lstring = lpy.Lstring()
         for module_name, module_args in modules:
-            module = lpy.newmodule(module_name)
-            module.args = module_args
+            module = lpy.newmodule(module_name, *module_args)
             lstring.append(module)
 
         return lstring
 
     @classmethod
-    def from_lstring(cls, lstring, node_modules, internode_modules, null_modules=None):
+    def from_lstring(cls, lstring, node_modules, internode_modules, terminal_modules=None):
 
-        if null_modules is None:
-            null_modules = []
+        """
+        This function takes in an LString and turns it into a graph format.
+        In order to obtain the same LString after calling to_lstring(), the LString must obey these conventions:
+        - Without brackets, the format is (Node)(Pre-internode mods)(Internode)(Post-internode mods)(Node)
+        - With brackets, the format is (Node)[(Pre-internode mods)(Internode)...(Post-internode mods)(Node)]
+        If these conventions are not followed exactly, certain elements may be swap order and lead to unusual results.
+        Note that if there are multiple splits at a single node, the order is not guaranteed to be deterministic.
+        However the L-string should represent the exact same physical system.
+
+        Terminal modules: In some cases, you may wish to have a module that represents a combination of an internode
+        and a node, e.g. B = a bud, L = a leaf, etc. In this case, these modules are considered to be TERMINAL;
+        nothing should follow it. Therefore a terminal module should always be immediately followed by a ].
+        """
+
+        if terminal_modules is None:
+            terminal_modules = []
+
+        turtle_modules = ['^', '&', '/', 'Left', 'Right', 'Up', 'Down', 'RollL', 'RollR']
 
         final_graph = nx.DiGraph()
 
         last_node = None
 
         queued_modules = []
+        queued_turtle_modules = []
         queued_internode = {}
 
         stack = []
@@ -101,23 +208,34 @@ class TreeStructure:
             if name in node_modules:
                 module_id = module.args[0]
                 assert module_id not in final_graph
-                final_graph.add_node(module_id, name=name, args=module.args[1:])
+                final_graph.add_node(module_id, name=name, args=module.args)
                 if last_node is not None:
                     queued_internode['post_modules'] = queued_modules
+                    queued_internode['post_turtle_modules'] = queued_turtle_modules
                     final_graph.add_edge(last_node, module_id, **queued_internode)
                     queued_internode = {}
                     queued_modules = []
+                    queued_turtle_modules = []
+
                 last_node = module_id
             elif name in internode_modules:
-                queued_internode = {'name': name, 'args': module.args, 'branch_id': bid, 'pre_modules': queued_modules}
+                queued_internode = {'name': name, 'args': module.args, 'branch_id': bid, 'pre_modules': queued_modules,
+                                    'pre_turtle_modules': queued_turtle_modules}
                 queued_modules = []
-            elif name in null_modules:
+                queued_turtle_modules = []
+
+            elif name in turtle_modules:
+                queued_turtle_modules.append((name, module.args))
+
+            elif name in terminal_modules:
                 assert not queued_internode
 
                 dummy_node = 'null_{}'.format(id(module))
                 final_graph.add_node(dummy_node, name='', args=[])
-                final_graph.add_edge(last_node, dummy_node, name=name, args=module.args, pre_modules=queued_modules, branch_id=bid)
+                final_graph.add_edge(last_node, dummy_node, name=name, args=module.args, pre_modules=queued_modules,
+                                     pre_turtle_modules=queued_turtle_modules, branch_id=bid)
                 queued_modules = []
+                queued_turtle_modules = []
                 bid = bid_counter()
 
             elif name == '[':
@@ -125,9 +243,6 @@ class TreeStructure:
                 stack.append((last_node, bid))
                 bid = bid_counter()
             elif name == ']':
-                if queued_internode:
-                    print('Issue at index {}: {}'.format(i, queued_internode))
-                    raise Exception()
                 last_node, bid = stack.pop()
             else:
                 queued_modules.append((name, module.args))
@@ -143,59 +258,6 @@ class Counter:
         cur_val = self.val
         self.val += 1
         return cur_val
-
-
-def insert_modules(lstring, module_to_insert, node_pairs, node_modules, at_end=False):
-
-    """
-    modules_to_insert: A module type to insert (currently as a string)
-    node_pairs: A list of directed pairs of nodes for the insertion (e.g. [(3,155), (20,5)])
-    at_end: If True, will place module right before the child node. Otherwise, will place right before parent node.
-    """
-
-    idx = 0
-    last_node_and_idx = (None, None)
-    split_idx = {}
-    stack = []      # (Previous parent node, previous parent idx)
-
-    while idx < len(lstring):
-        module = lstring[idx]
-        name = module.name
-        if name in node_modules:
-            node_id = module.args[0]
-            last_node_id, last_node_idx = last_node_and_idx
-            edge = (last_node_id, node_id)
-            if (last_node_id, node_id) in node_pairs:
-                new_module = lpy.newmodule(module_to_insert)
-                if at_end:
-                    lstring.insertAt(idx, new_module)
-                else:
-                    last_split_idx = split_idx.get(last_node_id)
-                    lstring.insertAt((last_split_idx or last_node_idx) + 1, new_module)
-                idx += 1
-            last_node_and_idx = (node_id, idx)
-
-        elif name == '[':
-            stack.append(last_node_and_idx)
-            split_idx[last_node_and_idx[0]] = idx
-        elif name == ']':
-            last_node_and_idx = stack.pop()
-
-        idx += 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -244,7 +306,17 @@ def tie_all(lstring):
 
 
 if __name__ == '__main__':
-    pass
+    import pickle
+    with open(r'D:\Documents\Temp\test.pickle', 'rb') as fh:
+        tree = pickle.load(fh)
+
+    tree.branches
+    import pdb
+    pdb.set_trace()
+
+    tree.to_lstring()
+
+
     # import matplotlib.pyplot as plt
     # curve = OGH([0, 0], [1, 1], [5, 0], [1, 0])
     # pts = curve.eval()

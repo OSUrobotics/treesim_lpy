@@ -15,6 +15,21 @@ class Target(ABC):
     def get_segment_dist(self, seg_0, seg_1):
         ...
 
+    def get_point_sequence_dist(self, pts):
+        best_dist = np.inf
+        best_to_return = None
+        for idx, (pt_1, pt_2) in enumerate(zip(pts[:-1], pts[1:])):
+            if np.linalg.norm(pt_1 - pt_2) < 1e-5:
+                continue
+
+
+            target_dist, alt_dist, pt = self.get_segment_dist(pt_1, pt_2)
+            if target_dist < best_dist:
+                best_dist = target_dist
+                best_to_return = (idx, target_dist, alt_dist, pt)
+
+        return best_to_return
+
 
 class PointTarget(Target):
     def __init__(self, pt):
