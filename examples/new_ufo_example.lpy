@@ -1,0 +1,144 @@
+import numpy as np
+import networkx as nx
+import sys
+import os
+from collections import defaultdict
+import json
+from networkx.readwrite import json_graph
+import importlib
+
+sys.path.append('../')
+
+import operators
+import branch_operations as bops
+import curves
+
+for mod in [operators, bops, curves]:
+  importlib.reload(mod)
+
+
+class Increment:
+  def __init__(self):
+    self.start = 0
+  
+  def __call__(self):
+    return_val = self.start
+    self.start += 1
+    return return_val
+
+INC = Increment()
+LOGGER = defaultdict(lambda: [0, 0, 0])
+LAST_LSTRING = None
+
+TEST_UPDATED = False
+
+
+module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
+module I_t, I, Dummy			# Trunk internode, regular internode, dummy
+module B, B_f			# Generic bud, fruiting bud
+module Roll		# Directional module that doesn't get picked up by the tree stuff
+
+Axiom: R(INC())Dummy@Ge^(np.random.uniform(15,45))M_t(INC(),0)
+
+
+derivation length: 20
+production:
+M_t(id, age):
+  nproduce Roll(60)N(id)
+  if age > 0 and np.random.uniform() < 0.5:
+    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.20)]
+  produce I_tM_t(INC(), age+1)
+
+B(id, p):
+  if np.random.uniform() < p:
+    produce IM(id,0)
+
+
+M(id, age):
+  nproduce Roll(60)N(id)
+  if np.random.uniform() < 0.25:
+    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.10)]
+  produce IM(INC(), age+1)
+
+interpretation:
+I --> SetColor(1)F(1,0.2)
+I_t --> SetColor(2)F(1,0.5)
+Roll(deg) --> /(deg)
+# I_b --> SetColor(3)F(0.5, 0.1)
+
+
+B(id, p) --> F(0.5, 0.1)
+R(id) --> GetPos(LOGGER[id])
+M(id, age) --> GetPos(LOGGER[id])
+M_t(id, age) --> GetPos(LOGGER[id])
+N(id) --> GetPos(LOGGER[id])
+
+
+
+endlsystem
+
+
+def StartEach():
+  global TEST_UPDATED
+  if TEST_UPDATED:
+    print('Newly received: \n{}'.format(LAST_LSTRING))
+    TEST_UPDATED = False
+  return LAST_LSTRING
+
+def EndEach(lstring, lsystem):
+  global LAST_LSTRING
+  LAST_LSTRING = lstring
+  return lstring
+  
+def EndInterpretation():
+
+  
+  TreeStructure = operators.TreeStructure
+  
+  global LAST_LSTRING
+  lstring = LAST_LSTRING
+  iter = getIterationNb()
+  if iter and not iter % 4:
+    tree = TreeStructure.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S'], ['I_t', 'I', 'I_b', 'Dummy'], ['B', 'B_f'])
+    tree.set_node_attributes(LOGGER, name='position')
+    
+    root_branch = tree.search_branches('generation', '=', 0, assert_unique=True)
+    nodes = tree.branches[root_branch]['nodes']
+    pts = tree.branches[root_branch]['points']
+    length = tree.branches[root_branch]['length']
+    
+    target = bops.PointTarget([5.0, 0.0, 2.0])
+    _, dist_to_target, _, target_pt = target.get_point_sequence_dist(pts)
+    if length > dist_to_target + np.linalg.norm(target_pt - pts[0]):
+      # TEMP HACK ON THE PTS[2]
+      params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt], pts[2]-pts[0], 1)
+      if rez.success:
+        curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
+        tree.set_guide_on_nodes(nodes, curve_pts)
+        print('TEST:\n{}'.format(tree.graph.nodes[nodes[0]]))
+        
+#        import pickle
+#        with open(r'D:\Documents\Temp\test.pickle', 'wb') as fh:
+#          pickle.dump(tree, fh)
+        
+        global TEST_UPDATED
+        TEST_UPDATED = True
+        
+    
+    lstring = tree.to_lstring()
+    if TEST_UPDATED:
+      print('After updating guide:\n{}'.format(lstring))
+    #graph = extract_skeleton_from_lstring(lstring, list('MNS'), ['I', 'I_s'])
+    #nx.set_node_attributes(graph, LOGGER, name='position')
+    #edges = list(graph.edges)
+    #edge = edges[np.random.randint(len(edges))]
+    #print('Starting len: {}'.format(len(lstring)))
+    #insert_modules(lstring, 'X', [edge], 'MNS', True)
+    #print('Ending len: {}'.format(len(lstring)))
+    #print(lstring)
+    
+    #json_data = json_graph.node_link_data(graph)
+    #with open('test.json', 'w') as fh:
+    #  json.dump(json_data, fh)
+  LAST_LSTRING = lstring
+  print(LAST_LSTRING)
