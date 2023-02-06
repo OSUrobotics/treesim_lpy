@@ -30,6 +30,8 @@ INC = Increment()
 LOGGER = defaultdict(lambda: [0, 0, 0])
 LAST_LSTRING = None
 
+TEST = None
+
 targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
 next_target = 0
 
@@ -40,8 +42,8 @@ module B, B_f			# Generic bud, fruiting bud
 module Roll		# Directional module that doesn't get picked up by the tree stuff
 module Flags
 
-Axiom: R(INC())^(np.random.uniform(15,45))Dummy@GeM_t(INC(),0)
-
+#Axiom: R(INC())^(np.random.uniform(15,45))Dummy@GeM_t(INC(),0)
+Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
 derivation length: 20
 production:
@@ -63,19 +65,20 @@ M(id, age):
   produce IM(INC(), age+1)
 
 interpretation:
-I --> SetColor(1)F(1,0.2)
-I_t --> SetColor(2)F(1,0.5)
+I --> SetColor(1)F(1,0.1)
+I_t --> SetColor(2)F(1,0.3)
 # Roll(deg) --> /(deg)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
 
 B(id, p) --> F(0.5, 0.1)
-R(id) --> GetPos(LOGGER[id])
-M(id, age) --> GetPos(LOGGER[id])
-M_t(id, age) --> GetPos(LOGGER[id])
+R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
+M(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
+M_t(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])
-
-
+Flags(flag):
+  if flag == 1:
+    produce [Frame(1.5, 0.5)]
 
 endlsystem
 
@@ -85,7 +88,7 @@ endlsystem
 def StartEach():
   return LAST_LSTRING
 
-def EndEach(lstring, lsystem):
+def EndEach(lstring):
   global LAST_LSTRING
   LAST_LSTRING = lstring
   return lstring
@@ -95,6 +98,8 @@ def EndInterpretation():
   
   global LAST_LSTRING
   global next_target
+  global TEST
+  
   
   lstring = LAST_LSTRING
   iter = getIterationNb()
@@ -118,19 +123,24 @@ def EndInterpretation():
       print('Index of last tie: {}'.format(last_tie_idx))
       nodes = nodes[last_tie_idx:]
       pts = tree.branches[root_branch]['points'][last_tie_idx:]
-      length = np.sum(np.linalg.norm(pts[:-1] - pts[1:], axis=1))
+      
+      offsets = np.linalg.norm(pts[:-1] - pts[1:], axis=1)
+      cumul_lens = np.cumsum(offsets)
+      length = cumul_lens[-1]
       if length > 0:
         _, dist_to_target, _, target_pt = target.get_point_sequence_dist(pts)
         if length > dist_to_target + np.linalg.norm(target_pt - pts[0]):
-          # TEMP HACK ON THE PTS[2]
-          params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt], pts[2]-pts[0], 1)
+          params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt], pts[2 if nodes[0] == 0 else 1]-pts[0], 1)
           if rez.success:
             print('Tying to Target {}'.format(next_target))
             curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
             print(curve_pts)
-            tree.set_guide_on_nodes(nodes, curve_pts)
+            curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
             
-            print('DEBUGGING:\n{}\n{}\n{}'.format(nodes, tree.graph.edges[nodes[0], nodes[1]], tree.graph.edges[nodes[-2], nodes[-1]]))
+            tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2) + 1
+            tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts)
+            
+            #print('DEBUGGING:\nNodes:\n{}\nFirst Edge:\n{}\nLast Edge:\n{}\nL-String:\n{}\n'.format(nodes, tree.graph.edges[nodes[0], nodes[1]], tree.graph.edges[nodes[-2], nodes[-1]], tree.to_lstring()))
             next_target += 1
             
     #        import pickle
@@ -152,3 +162,4 @@ def EndInterpretation():
     #with open('test.json', 'w') as fh:
     #  json.dump(json_data, fh)
   LAST_LSTRING = lstring
+  TEST = iter
