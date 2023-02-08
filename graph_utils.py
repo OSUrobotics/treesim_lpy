@@ -5,7 +5,7 @@ import openalea.lpy as lpy
 import openalea.plantgl.all as plantgl
 import functools
 from openalea.plantgl.scenegraph.cspline import CSpline
-
+from abc import ABC, abstractmethod
 
 class LStringGraphDual:
     def __init__(self, graph: nx.DiGraph):
@@ -98,14 +98,14 @@ class LStringGraphDual:
         return bids
 
 
-    def set_guide_on_nodes(self, nodes, points):
+    def set_guide_on_nodes(self, nodes, points, guide_module='SetGuide'):
         length = np.sum(np.linalg.norm(points[:-1] - points[1:], axis=1))
         diff = np.linalg.norm(self.graph.nodes[nodes[0]]['position'] - points[0])
         if diff > 1e-3:
             print('[WARNING] Attempting to set a curve guide that is not close to the recorded start.')
         for i, edge in enumerate(zip(nodes[:-1], nodes[1:])):
             if i == 0:
-                self.graph.edges[edge]['pre_turtle_modules'] = [('SetGuide', [CSpline(points).curve(), length])]
+                self.graph.edges[edge]['pre_turtle_modules'] = [(guide_module, [CSpline(points).curve(), length])]
                 # print('[{}] {}'.format(node, self.graph.nodes[node]['pre_turtle_modules']))
             else:
                 self.graph.edges[edge]['pre_turtle_modules'] = []
@@ -168,7 +168,7 @@ class LStringGraphDual:
         return lstring
 
     @classmethod
-    def from_lstring(cls, lstring, node_modules, internode_modules, terminal_modules=None):
+    def from_lstring(cls, lstring, node_modules, internode_modules, terminal_modules=None, dir_modules=None):
 
         """
         This function takes in an LString and turns it into a graph format.
@@ -187,7 +187,7 @@ class LStringGraphDual:
         if terminal_modules is None:
             terminal_modules = []
 
-        turtle_modules = ['^', '&', '/', 'Left', 'Right', 'Up', 'Down', 'RollL', 'RollR']
+        turtle_modules = ['^', '&', '/', 'Left', 'Right', 'Up', 'Down', 'RollL', 'RollR'] + (dir_modules or [])
 
         final_graph = nx.DiGraph()
 
@@ -248,6 +248,30 @@ class LStringGraphDual:
                 queued_modules.append((name, module.args))
 
         return cls(final_graph)
+
+
+class Converter:
+
+    def serialize(self, module):
+        return module.name, module.args
+
+    def deserialize(self, name, args):
+        module = lpy.newmodule(name, *args)
+        return module
+
+
+class SetGuideSplineConverter(Converter):
+    def serialize(self, module):
+        assert module.name == 'SetGuide'
+        info = {'points': module.args[0].ctrlPointList}
+        try:
+            info['length'] = module.args[1]
+        except IndexError:
+            pass
+        return module.name, info
+
+    def deserialize(self, name, kwargs):
+        assert name == 'SetGuide'
 
 
 class Counter:

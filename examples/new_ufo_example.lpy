@@ -40,7 +40,7 @@ module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
 module I_t, I, Dummy			# Trunk internode, regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
 module Roll		# Directional module that doesn't get picked up by the tree stuff
-module Flags
+module Flags, GlobalGuide
 
 #Axiom: R(INC())^(np.random.uniform(15,45))Dummy@GeM_t(INC(),0)
 Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
@@ -67,6 +67,8 @@ M(id, age):
 interpretation:
 I --> SetColor(1)F(1,0.1)
 I_t --> SetColor(2)F(1,0.3)
+GlobalGuide(c, l):
+  produce @R(0,0,1,1,0,0)SetGuide(c,l)
 # Roll(deg) --> /(deg)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
@@ -76,8 +78,8 @@ R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M_t(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])
-Flags(flag):
-  if flag == 1:
+Flags(*flags):
+  if 1 in flags:
     produce [Frame(1.5, 0.5)]
 
 endlsystem
@@ -105,7 +107,7 @@ def EndInterpretation():
   iter = getIterationNb()
   if iter and not iter % 4:
     print('Updating')
-    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S'], ['I_t', 'I', 'I_b', 'Dummy'], ['B', 'B_f'])
+    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S'], ['I_t', 'I', 'I_b', 'Dummy'], ['B', 'B_f'], ['GlobalGuide'])
     tree.set_node_attributes(LOGGER, name='position')
     
     if next_target < len(targets):
@@ -138,7 +140,7 @@ def EndInterpretation():
             curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
             
             tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2) + 1
-            tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts)
+            tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts, 'GlobalGuide')
             
             #print('DEBUGGING:\nNodes:\n{}\nFirst Edge:\n{}\nLast Edge:\n{}\nL-String:\n{}\n'.format(nodes, tree.graph.edges[nodes[0], nodes[1]], tree.graph.edges[nodes[-2], nodes[-1]], tree.to_lstring()))
             next_target += 1
