@@ -32,6 +32,15 @@ LAST_LSTRING = None
 
 TEST = None
 
+bud_rot_factor = 360/np.random.uniform(3,5)		# Number of "revolutions" of buds in a meter of growth
+trunk_start = 0.1
+trunk_max = 0.3
+trunk_incr = 0.025
+other_start = 0.05
+other_max = 0.10
+other_incr = 0.01
+bud_max_age = 5
+
 targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
 next_target = 0
 
@@ -39,44 +48,57 @@ next_target = 0
 module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
 module I_t, I, Dummy			# Trunk internode, regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
-module Roll		# Directional module that doesn't get picked up by the tree stuff
+# module Roll		# Directional module that doesn't get picked up by the tree stuff
 module Flags, GlobalGuide
 
-#Axiom: R(INC())^(np.random.uniform(15,45))Dummy@GeM_t(INC(),0)
-Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
+Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Dummy@GeM_t(INC(),0,0)
+# Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
 derivation length: 20
 production:
-M_t(id, age):
-  nproduce Roll(60)N(id)
+I(l,d):
+  nproduce I(l,d+min((other_max-d)/2, other_incr))
+  
+  
+I_t(l,d):
+  nproduce I_t(l,d+min((trunk_max-d)/2, trunk_incr))
+  
+  
+M_t(id, age, prog):
+  nproduce /(prog * bud_rot_factor)N(id)
   if age > 0 and np.random.uniform() < 0.5:
-    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.20)]
-  produce I_tM_t(INC(), age+1)
+    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.20, 0)]
+  produce I_t(1,trunk_start)M_t(INC(), age+1, prog+1)
 
-B(id, p):
+B(id, p, a):
+  
+  if a >= bud_max_age:
+    produce B(id, p, a+1)
+  
   if np.random.uniform() < p:
-    produce IM(id,0)
+    produce I(1,other_start)M(id,0,0)
+  
+  produce B(id, p, a+1)
 
 
-M(id, age):
-  nproduce Roll(60)N(id)
+M(id, age, prog):
+  nproduce /(prog * bud_rot_factor)N(id)
   if np.random.uniform() < 0.25:
-    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.10)]
-  produce IM(INC(), age+1)
+    nproduce [^(np.random.uniform(15, 45))B(INC(), 0.10, 0)]
+  produce I(1,other_start)M(INC(), age+1, prog+1)
 
 interpretation:
-I --> SetColor(1)F(1,0.1)
-I_t --> SetColor(2)F(1,0.3)
+I(l,d) --> SetColor(1)F(l,d)
+I_t(l,d) --> SetColor(2)F(l,d)
 GlobalGuide(c, l):
   produce @R(0,0,1,1,0,0)SetGuide(c,l)
-# Roll(deg) --> /(deg)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
 
-B(id, p) --> F(0.5, 0.1)
+B(id, p, a) --> F(0.5, 0.1)
 R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
-M(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
-M_t(id, age) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
+M(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
+M_t(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])
 Flags(*flags):
   if 1 in flags:

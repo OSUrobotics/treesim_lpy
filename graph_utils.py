@@ -187,7 +187,7 @@ class LStringGraphDual:
         if terminal_modules is None:
             terminal_modules = []
 
-        turtle_modules = ['^', '&', '/', 'Left', 'Right', 'Up', 'Down', 'RollL', 'RollR'] + (dir_modules or [])
+        turtle_modules = ['^', '&', 'Left', 'Right', 'Up', 'Down', 'RollL', 'RollR'] + (dir_modules or [])
 
         final_graph = nx.DiGraph()
 
