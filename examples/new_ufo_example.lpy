@@ -12,8 +12,9 @@ sys.path.append('../')
 import graph_utils
 import branch_operations as bops
 import curves
+import pruning_strategy
 
-for mod in [graph_utils, bops, curves]:
+for mod in [graph_utils, bops, curves, pruning_strategy]:
   importlib.reload(mod)
 
 
@@ -42,7 +43,8 @@ other_incr = 0.01
 bud_max_age = 5
 
 targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
-next_target = 0
+strat = pruning_strategy.UFOPruningStrategy(targets, [])
+
 
 
 module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
@@ -132,46 +134,8 @@ def EndInterpretation():
     tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S'], ['I_t', 'I', 'I_b', 'Dummy'], ['B', 'B_f'], ['GlobalGuide'])
     tree.set_node_attributes(LOGGER, name='position')
     
-    if next_target < len(targets):
-      target = targets[next_target]
-      
-      root_branch = tree.search_branches('generation', '=', 0, assert_unique=True)
-      nodes = tree.branches[root_branch]['nodes']
-      
-      # Find the last internode that was tied down and return nodes for all subsequent internodes
-      last_tie_idx = 0
-      for idx, (n1, n2) in enumerate(zip(nodes[:-1], nodes[1:])):
-        data = dict(tree.graph.edges[n1, n2].get('post_modules', []))
-        if 1 in data.get('Flags', []):
-          last_tie_idx = idx + 1
-      print('Index of last tie: {}'.format(last_tie_idx))
-      nodes = nodes[last_tie_idx:]
-      pts = tree.branches[root_branch]['points'][last_tie_idx:]
-      
-      offsets = np.linalg.norm(pts[:-1] - pts[1:], axis=1)
-      cumul_lens = np.cumsum(offsets)
-      length = cumul_lens[-1]
-      if length > 0:
-        _, dist_to_target, _, target_pt = target.get_point_sequence_dist(pts)
-        if length > dist_to_target + np.linalg.norm(target_pt - pts[0]):
-          params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt], pts[2 if nodes[0] == 0 else 1]-pts[0], 1)
-          if rez.success:
-            print('Tying to Target {}'.format(next_target))
-            curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
-            print(curve_pts)
-            curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
-            
-            tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2) + 1
-            tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts, 'GlobalGuide')
-            
-            #print('DEBUGGING:\nNodes:\n{}\nFirst Edge:\n{}\nLast Edge:\n{}\nL-String:\n{}\n'.format(nodes, tree.graph.edges[nodes[0], nodes[1]], tree.graph.edges[nodes[-2], nodes[-1]], tree.to_lstring()))
-            next_target += 1
-            
-    #        import pickle
-    #        with open(r'D:\Documents\Temp\test.pickle', 'wb') as fh:
-    #          pickle.dump(tree, fh)
-  
-    
+    strat.set_tree(tree)
+    strat.apply_strategy()
     lstring = tree.to_lstring()
     #graph = extract_skeleton_from_lstring(lstring, list('MNS'), ['I', 'I_s'])
     #nx.set_node_attributes(graph, LOGGER, name='position')
