@@ -5,7 +5,7 @@ import sys
 sys.path.append('../')
 from stochastic_tree import BasicWood
 from architecture import Architecture, WireVector
-import operators
+#import operators
 import numpy as np
 import random as rd
 import copy
@@ -106,8 +106,8 @@ def EndEach(lstring):
         for branch in parent_child_dict[trunk_base.name]:
             branch.update_guide(branch.guide_target)
             print(branch.name, branch.guide_target)
-        while operators.tie_all(lstring):
-            pass
+#        while operators.tie_all(lstring):
+#            pass
         while pruning_strategy(lstring):
             pass
     return lstring
@@ -158,7 +158,7 @@ bud(wood) :
             produce *
 
         if isinstance(wood.type, Branch) and isinstance(new_object, Spur):
-            nproduce [SetColor(0,0,255)@O(0.3)]
+            nproduce [SetColor(0,0,255)@O(0.2)]
 
         parent_child_dict[new_object.name] = []
         parent_child_dict[wood.type.name].append(new_object)
@@ -180,3 +180,15 @@ Attractors(arch):
     pttodisplay = arch.attractor_grid.get_enabled_points()
     if len(pttodisplay) > 0:
         produce [,(3) @g(PointSet(pttodisplay,width=10))]
+
+endlsystem
+
+def EndInterpretation():
+  iter = getIterationNb()
+  print(iter)
+
+
+def End(lstring, lscene):
+  from export_models import convert_scene_to_mesh
+  
+  convert_scene_to_mesh(lscene, file_path='test.ply')

@@ -51,9 +51,9 @@ module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
 module I_t, I, Dummy			# Trunk internode, regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
 # module Roll		# Directional module that doesn't get picked up by the tree stuff
-module Flags, GlobalGuide
+module Flags, GlobalGuide, Viz
 
-Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Dummy@GeM_t(INC(),0,0)
+Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Viz(strat)Dummy@GeM_t(INC(),0,0)
 # Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
 derivation length: 20
@@ -105,6 +105,10 @@ N(id) --> GetPos(LOGGER[id])
 Flags(*flags):
   if 1 in flags:
     produce [Frame(1.5, 0.5)]
+Viz(strat):
+  # Not working right now, need to find fix
+  mod = strat.viz()
+  produce [,(3)mod]
 
 endlsystem
 
@@ -129,7 +133,7 @@ def EndInterpretation():
   
   lstring = LAST_LSTRING
   iter = getIterationNb()
-  if iter and not iter % 4:
+  if iter:
     print('Updating')
     tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S'], ['I_t', 'I', 'I_b', 'Dummy'], ['B', 'B_f'], ['GlobalGuide'])
     tree.set_node_attributes(LOGGER, name='position')
@@ -137,17 +141,9 @@ def EndInterpretation():
     strat.set_tree(tree)
     strat.apply_strategy()
     lstring = tree.to_lstring()
-    #graph = extract_skeleton_from_lstring(lstring, list('MNS'), ['I', 'I_s'])
-    #nx.set_node_attributes(graph, LOGGER, name='position')
-    #edges = list(graph.edges)
-    #edge = edges[np.random.randint(len(edges))]
-    #print('Starting len: {}'.format(len(lstring)))
-    #insert_modules(lstring, 'X', [edge], 'MNS', True)
-    #print('Ending len: {}'.format(len(lstring)))
-    #print(lstring)
-    
-    #json_data = json_graph.node_link_data(graph)
-    #with open('test.json', 'w') as fh:
-    #  json.dump(json_data, fh)
+  
+  #json_data = json_graph.node_link_data(graph)
+  #with open('test.json', 'w') as fh:
+  #  json.dump(json_data, fh)
   LAST_LSTRING = lstring
   TEST = iter
