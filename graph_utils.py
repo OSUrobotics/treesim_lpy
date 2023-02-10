@@ -119,6 +119,35 @@ class LStringGraphDual:
     def set_node_attributes(self, mapping, name=None):
         nx.set_node_attributes(self.graph, mapping, name=name)
 
+    def stub_branch(self, nodes, stub_len, replacement_module='S', save_pre_modules=True, save_post_modules=False):
+
+        cumul = 0
+        for i, edge in enumerate(zip(nodes[:-1], nodes[1:])):
+
+            pt_1 = self.graph.nodes[edge[0]]['point']
+            pt_2 = self.graph.nodes[edge[1]]['point']
+            diff = pt_2 - pt_1
+            dist = np.linalg.norm(diff)
+
+            if cumul < stub_len <= cumul + dist:
+                to_cut = stub_len - cumul
+                if not save_pre_modules:
+                    self.graph.edges[edge]['pre_modules'] = []
+                if not save_post_modules:
+                    self.graph.edges[edge]['post_modules'] = []
+
+                self.graph.edges[edge]['post_modules'] = []
+                self.graph.edges[edge]['args'][0] = to_cut
+                self.graph.nodes[edge[1]]['name'] = replacement_module
+
+                for succ in self.graph.successors(edge[1]):
+                    self.graph.remove_edge(edge[1], succ)
+
+                return True
+            cumul += dist
+        return False
+
+
     def to_lstring(self):
 
         def explore(edge):
