@@ -4,6 +4,7 @@ import networkx as nx
 from graph_utils import LStringGraphDual
 import curves
 from collections import defaultdict
+from branch_operations import Target
 
 class PruningStrategy:
 
@@ -21,16 +22,70 @@ class UFOPruningStrategy(PruningStrategy):
         self.wire_walls = wire_walls
         self.params = params
         self.tree = None
+        self._trunk_branch = None
 
         # State variables
         self.next_trunk_target = 0
         self.leaders_assigned = False
 
+    # Helper methods
+
+    @property
+    def trunk_branch(self):
+        if self._trunk_branch is None:
+            root_branch = self.tree.search_branches('generation', '=', 0, assert_unique=True)
+            self._trunk_branch = self.tree.branches[root_branch]
+        return self._trunk_branch
+
     def set_tree(self, tree: LStringGraphDual):
         self.tree = tree
+        self._trunk_branch = None
 
     def __getitem__(self, item):
         return self.params[item]
+
+    def find_module(self, module, edge, pre=True):
+
+        pre_mods = self.tree.graph.edges[edge].get('pre_modules' if pre else 'post_modules', [])
+        flags = None
+        for mod in pre_mods:
+            if mod[0] == module:
+                flags = mod[1]
+                break
+        return flags
+
+
+    def tie_branch(self, nodes, target_obj: Target):
+        pts = np.array([self.tree.graph.nodes[n]['position'] for n in nodes])
+        offsets = np.linalg.norm(pts[:-1] - pts[1:], axis=1)
+        cumul_lens = np.cumsum(offsets)
+        length = cumul_lens[-1]
+        if length > 0:
+
+            _, dist_to_target, _, target_pt = target_obj.get_point_sequence_dist(pts)
+            if length > dist_to_target + np.linalg.norm(target_pt - pts[0]):
+                params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt],
+                                                                    pts[2 if nodes[0] == 0 else 1] - pts[0], 1)
+                if rez.success:
+                    curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
+                    curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
+                    tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2) + 1
+                    self.tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts, 'GlobalGuide')
+
+                    return (nodes[tie_down_node_idx], nodes[tie_down_node_idx+1])
+
+        return None
+
+    def find_buds(self, nodes):
+        buds = []
+        for node in nodes:
+            next_nodes = self.tree.graph.successors(node)
+            for next_node in next_nodes:
+                if self.tree.graph.nodes[next_node]['name'] == 'B':
+                    buds.append((node, next_node))
+        return buds
+
+    # Related to steps
 
     def apply_strategy(self, **kwargs):
         self.tie_down_trunk()
@@ -41,96 +96,70 @@ class UFOPruningStrategy(PruningStrategy):
             return
 
         target = self.trunk_targets[self.next_trunk_target]
-        root_branch = self.tree.search_branches('generation', '=', 0, assert_unique=True)
-        nodes = self.tree.branches[root_branch]['nodes']
+        nodes = self.trunk_branch['nodes']
 
         # Find the last internode that was tied down and return nodes for all subsequent internodes
         last_tie_idx = 0
         for idx, (n1, n2) in enumerate(zip(nodes[:-1], nodes[1:])):
-            data = dict(self.tree.graph.edges[n1, n2].get('post_modules', []))
-            if 1 in data.get('Flags', []):
+            if self.find_module('Tie', (n1, n2)):
                 last_tie_idx = idx + 1
+
         print('Index of last tie: {}'.format(last_tie_idx))
         nodes = nodes[last_tie_idx:]
-        pts = self.tree.branches[root_branch]['points'][last_tie_idx:]
 
-        offsets = np.linalg.norm(pts[:-1] - pts[1:], axis=1)
-        cumul_lens = np.cumsum(offsets)
-        length = cumul_lens[-1]
-        if length > 0:
-            _, dist_to_target, _, target_pt = target.get_point_sequence_dist(pts)
-            if length > dist_to_target + np.linalg.norm(target_pt - pts[0]):
-                params, _, rez = curves.run_cubic_bezier_strain_opt([pts[0], target_pt],
-                                                                    pts[2 if nodes[0] == 0 else 1] - pts[0], 1)
-                if rez.success:
-                    print('Tying to Target {}'.format(self.next_trunk_target))
-                    curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
-                    print(curve_pts)
-                    curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
-
-                    tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2) + 1
-                    self.tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts, 'GlobalGuide')
-
-                    self.next_trunk_target += 1
+        tied_edge = self.tie_branch(nodes, target)
+        if tied_edge:
+            self.tree.graph.edges[tied_edge]['pre_modules'].append(('Tie', ('Trunk', self.next_trunk_target)))
+            self.next_trunk_target += 1
 
     def examine_leaders(self):
-        root_branch = self.tree.search_branches('generation', '=', 0, assert_unique=True)
-        branch = self.tree.branches[root_branch]
-        if branch['length'] < 5:
+        if self.trunk_branch['length'] < 5:
             self.rub_off_trunk_buds()
-
-        self.assign_leaders()
-
-    def rub_off_trunk_buds(self):
-        pass
-
-    def find_module(self, module, edge):
-        pre_mods = self.tree.graph.edges[edge].get('pre_modules', [])
-        flags = None
-        for mod in pre_mods:
-            if mod[0] == module:
-                flags = mod[1]
-                break
-        return flags
+        self.manage_leaders()
 
 
-    def assign_leaders(self):
+    def rub_off_trunk_buds(self, avoid_marked=True):
+        trunk_nodes = self.trunk_branch['nodes']
+        to_remove = []
+        for edge in self.find_buds(trunk_nodes):
+            if not avoid_marked or (avoid_marked and self.find_module('Mark', edge)):
+                to_remove.append(edge)
+
+        self.tree.graph.remove_edges_from(to_remove)
+
+
+    def manage_leaders(self):
         first_gen_branches = self.tree.search_branches('generation', '=', 1)
         # Determine the status of each branch - Unassigned and untied (0), assigned but untied (1), tied (2)
-        tied_nodes = defaultdict(list)
+        existing_ties = defaultdict(list)
 
         for branch_id in first_gen_branches:
             branch = self.tree.branches[branch_id]
             nodes = branch['nodes']
 
             # Iterate through edges in reverse order and see if there are any ties
-            last_tie = None
             for edge in zip(nodes[-2:1:-1], nodes[-1:2:-1]):
                 tie_info = self.find_module('Tie', edge)
                 if tie_info is not None:
-                    last_tie = edge
                     wall_id, wall_tie_idx = tie_info
-                    tied_nodes[wall_id] = nodes[0]
-
+                    existing_ties[wall_id].append(nodes[0])
                     self.manage_tied_branch(nodes[nodes.index(edge[1]):], wall_id, wall_tie_idx)
-
-            if last_tie is not None:
-                # Tie down the branches
-                pass
-
-            mark = self.find_module('Mark', (nodes[0], nodes[1]))
-            if mark is not None:
-                wall_id = mark[0]
-                tied_nodes[wall_id].append(nodes[0])
+                    break
+            else:
+                # No existing tie was found - Check to see if it's marked for tying
+                mark = self.find_module('Mark', (nodes[0], nodes[1]))
+                if mark is not None:
+                    wall_id = mark[0]
+                    existing_ties[wall_id].append(nodes[0])
+                    self.manage_untied_branch(nodes, wall_id)
 
         # Check to see if all leaders have been assigned to each wall
         leaders_per_wall = self.params.get('leaders_per_wall', 5)
         is_full = True
-        for wall_id in range(self.wire_walls):
-            trunk_nodes = tied_nodes[wall_id]
+        for wall_id in range(len(self.wire_walls)):
+            trunk_nodes = existing_ties[wall_id]
             if len(trunk_nodes) < leaders_per_wall:
                 is_full = False
-
 
         # If there is room, search for new buds that can be added to each wall
         if not is_full:
@@ -143,16 +172,20 @@ class UFOPruningStrategy(PruningStrategy):
             cum_dists = np.cumsum(dists)
 
             # For each wall, convert the root nodes to spacings along the trunk
-            wall_spacings = {}
-            all_tied_nodes = set()
-            for wall_id, trunk_nodes in tied_nodes.items():
-                spacings = [cum_dists[root_nodes.index[n] - 1] for n in trunk_nodes]  # Inefficient
-                wall_spacings[wall_id] = sorted(spacings)
-                all_tied_nodes.update(trunk_nodes)
+            node_dist_map = dict(zip(root_nodes[1:], cum_dists))
+            node_dist_map[root_nodes[0]] = 0
 
-            # TODO: This iteration needs to be over all bud internodes that are connected to the trunk
-            for node, cum_dist in zip(root_nodes[1:], cum_dists):
-                if node in all_tied_nodes or cum_dist < self.params.get('trunk_bare_dist', 5):
+            wall_spacings = {}
+            for wall_id, trunk_nodes in existing_ties.items():
+                spacings = [node_dist_map[n] for n in trunk_nodes]
+                wall_spacings[wall_id] = sorted(spacings)
+
+            trunk_buds = self.find_buds(root_nodes)
+
+            for bud_edge in trunk_buds:
+                node_on_trunk = bud_edge[0]
+                cum_dist = node_dist_map[node_on_trunk]
+                if cum_dist < self.params.get('trunk_bare_dist', 5):
                     continue
 
                 best_spacing = None
@@ -169,11 +202,15 @@ class UFOPruningStrategy(PruningStrategy):
 
                 if best_wall_id is not None:
 
-                    # [TODO] Flag the desired bud internode  - self.tree.graph.edges[edge]['pre_modules'] = [('Mark', [wall_id])]
+                    print('Marked bud {} to wall {}'.format(bud_edge, best_wall_id))
+                    self.tree.graph.edges[bud_edge]['pre_modules'] = [('Mark', [best_wall_id])]
                     wall_spacings[best_wall_id].append(cum_dist)
                     wall_spacings[best_wall_id].sort()
 
     def manage_tied_branch(self, nodes, wall_id, wall_tie_idx):
+
+        return
+
         if wall_tie_idx == len(self.wire_walls[wall_id]) - 1:
             self.tree.stub_branch(nodes, self.params.get('leader_excess_stub', 2.5))
         else:
@@ -183,14 +220,15 @@ class UFOPruningStrategy(PruningStrategy):
             next_pt = self.graph.nodes[nodes[1]]['point']
             vec = next_pt - base_pt
             vec = np.linalg.norm(vec)
-            # Hack
+            # TODO: Proper implementation of point distance
             _, _,  wire_target_pt = next_target.get_segment_dist(base_pt, base_pt + vec * 0.001)
 
             # Do tying
 
 
     def manage_untied_branch(self, nodes, wall_id):
-        pass
+
+        return
 
 
 def query_dist_from_line_points(pt, sorted_array):
