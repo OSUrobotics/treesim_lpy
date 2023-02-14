@@ -41,9 +41,17 @@ other_start = 0.05
 other_max = 0.10
 other_incr = 0.01
 bud_max_age = 5
+bud_prob = 0.0
 
-targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
-strat = pruning_strategy.UFOPruningStrategy(targets, [])
+# targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
+targets = [bops.PointTarget([x, 0.0, 2.0]) for x in [5.0, 10.0, 15.0]]
+wire_walls = [
+[bops.LinearTarget([0, 0, z], [1, 0 ,0]) for z in [4.0, 6.0, 8.0, 10.0]],
+]
+params = {
+'leaders_per_wall': 1,
+}
+strat = pruning_strategy.UFOPruningStrategy(targets, wire_walls, **params)
 
 
 
@@ -56,7 +64,7 @@ module Flags, GlobalGuide, Viz, Mark
 Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Viz(strat)Dummy@GeM_t(INC(),0,0)
 # Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
-derivation length: 20
+derivation length: 30
 production:
 I(l,d):
   nproduce I(l,d+min((other_max-d)/2, other_incr))
@@ -69,7 +77,7 @@ I_t(l,d):
 M_t(id, age, prog):
   nproduce /(prog * bud_rot_factor)N(id)
   if age > 0 and np.random.uniform() < 0.5:
-    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.20, 0)]
+    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.0, 0)]
   produce I_t(1,trunk_start)M_t(INC(), age+1, prog+1)
 
 B(id, p, a):
@@ -86,7 +94,7 @@ B(id, p, a):
 M(id, age, prog):
   nproduce /(prog * bud_rot_factor)N(id)
   if np.random.uniform() < 0.25:
-    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.10, 0)]
+    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.0, 0)]
   produce I(1,other_start)M(INC(), age+1, prog+1)
 
 interpretation:
@@ -101,10 +109,13 @@ B(id, p, a) --> GetPos(LOGGER[id])SetColor(3)@O(0.25)
 R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M_t(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
-N(id) --> GetPos(LOGGER[id])
-Flags(*flags):
-  if 1 in flags:
-    produce [Frame(1.5, 0.5)]
+N(id) --> GetPos(LOGGER[id])@L(str(id))
+Tie(wall, idx):
+  produce [@L('({}: {})'.format(wall, idx))Frame(1.5, 0.5)]
+  
+Mark(wall):
+  produce [@L('(Marked for {})'.format(wall))]
+  
 Viz(strat):
   # Not working right now, need to find fix
   mod = strat.viz()

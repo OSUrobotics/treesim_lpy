@@ -35,6 +35,12 @@ class PointTarget(Target):
     def __init__(self, pt):
         self.pt = np.array(pt)
 
+    def __repr__(self):
+        return '<PointTarget: ({:.2f},{:.2f},{:.2f})>'.format(*self.pt)
+
+    def get_point_dist(self, pt):
+        return np.linalg.norm(pt - self.pt), self.pt
+
     def get_segment_dist(self, seg_0, seg_1):
         seg_0 = np.array(seg_0)
         seg_1 = np.array(seg_1)
@@ -66,6 +72,13 @@ class LinearTarget(Target):
     def __init__(self, origin, ray):
         self.origin = np.array(origin)
         self.ray = normalize(np.array(ray))
+
+    def __repr__(self):
+        return '<LinearTarget: ({:.2f},{:.2f},{:.2f}),({:.2f},{:.2f},{:.2f})>'.format(*self.origin, *self.ray)
+
+    def get_point_dist(self, pt):
+        closest_pt = self.origin + (pt - self.origin).dot(self.ray) * self.ray
+        return np.linalg.norm(pt - closest_pt), closest_pt
 
     def get_segment_dist(self, seg_0, seg_1):
         seg_0 = np.array(seg_0)

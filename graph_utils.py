@@ -124,8 +124,8 @@ class LStringGraphDual:
         cumul = 0
         for i, edge in enumerate(zip(nodes[:-1], nodes[1:])):
 
-            pt_1 = self.graph.nodes[edge[0]]['point']
-            pt_2 = self.graph.nodes[edge[1]]['point']
+            pt_1 = np.array(self.graph.nodes[edge[0]]['position'])
+            pt_2 = np.array(self.graph.nodes[edge[1]]['position'])
             diff = pt_2 - pt_1
             dist = np.linalg.norm(diff)
 
