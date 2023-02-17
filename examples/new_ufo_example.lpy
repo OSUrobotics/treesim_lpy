@@ -6,8 +6,9 @@ from collections import defaultdict
 import json
 from networkx.readwrite import json_graph
 import importlib
-
+from openalea.plantgl.light.light import diffuseInterception
 sys.path.append('../')
+from scipy.stats import poisson
 
 import graph_utils
 import branch_operations as bops
@@ -27,11 +28,28 @@ class Increment:
     self.start += 1
     return return_val
 
+class LinearRamp:
+  def __init__(self, x1, x2, y1=0, y2=1):
+    
+    assert x1 < x2
+    
+    self.x1 = x1
+    self.x2 = x2
+    self.y1 = y1
+    self.y2 = y2
+  
+  def __call__(self, x):
+    if x < self.x1:
+      return self.y1
+    elif x > self.x2:
+      return self.y2
+    else:
+      return self.y1 + (self.y2 - self.y1) * (x - self.x1) / (self.x2 - self.x1)
+    
+
 INC = Increment()
 LOGGER = defaultdict(lambda: [0, 0, 0])
 LAST_LSTRING = None
-
-TEST = None
 
 bud_rot_factor = 360/np.random.uniform(3,5)		# Number of "revolutions" of buds in a meter of growth
 trunk_start = 0.1
@@ -40,16 +58,21 @@ trunk_incr = 0.025
 other_start = 0.05
 other_max = 0.10
 other_incr = 0.01
+
+bud_incidence = 1.0  # Average number of buds per meter segment
+rand_bend = 0.1  	# Average number of "random" bends per meter
+
 bud_max_age = 5
 bud_prob = 0.0
+bud_break_func = LinearRamp(0.05, 0.12)
 
 # targets = [bops.PointTarget([5.0, 0.0, 2.0]), bops.PointTarget([10.0, 0.0, 2.0])]
 targets = [bops.PointTarget([x, 0.0, 2.0]) for x in [5.0, 10.0, 15.0]]
 wire_walls = [
-[bops.LinearTarget([0, 0, z], [1, 0 ,0]) for z in [4.0, 6.0, 8.0, 10.0]],
+[bops.LinearTarget([0, 0, z], [1, 0 ,0]) for z in [4.0, 8.0, 12.0]],
 ]
 params = {
-'leaders_per_wall': 1,
+'leaders_per_wall': 4,
 }
 strat = pruning_strategy.UFOPruningStrategy(targets, wire_walls, **params)
 
@@ -58,13 +81,14 @@ strat = pruning_strategy.UFOPruningStrategy(targets, wire_walls, **params)
 module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
 module I_t, I, Dummy			# Trunk internode, regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
-# module Roll		# Directional module that doesn't get picked up by the tree stuff
+module Roll		# Directional module that doesn't get picked up by the tree stuff
 module Flags, GlobalGuide, Viz, Mark
+module L_s, L 		# Leaf stem, leaf
 
 Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Viz(strat)Dummy@GeM_t(INC(),0,0)
 # Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
-derivation length: 30
+derivation length: 20
 production:
 I(l,d):
   nproduce I(l,d+min((other_max-d)/2, other_incr))
@@ -76,26 +100,53 @@ I_t(l,d):
   
 M_t(id, age, prog):
   nproduce /(prog * bud_rot_factor)N(id)
-  if age > 0 and np.random.uniform() < 0.5:
-    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.0, 0)]
-  produce I_t(1,trunk_start)M_t(INC(), age+1, prog+1)
+  grow_len = 1
+  num_buds = poisson.rvs(bud_incidence * grow_len)
+  for i in range(num_buds):
+    roll = 360 * i / num_buds
+    nproduce [RollL(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),0.0,0,0)]
+  
+  bends = poisson.rvs(rand_bend * grow_len)
+  nproduce I_t(grow_len, trunk_start)
+  if bends:
+    nproduce ^(np.random.uniform(-30,30))
+  
+  produce M_t(INC(), age+1, prog+1)
 
-B(id, p, a):
+B(id, p, a, l):
   
-  if a >= bud_max_age:
-    produce B(id, p, a+1)
+  # if a >= bud_max_age:
+  #   produce B(id, p, a+1, 0)
   
-  if np.random.uniform() < p:
-    produce N(id)I(1,other_start)M(INC(),0,0)
+  p_light = bud_break_func(l) 
+  num_leaves_to_break = min(5, int(l / 0.05))
+  print('{}: {:.3f} (l={:.3f})'.format(id, p_light, l))
+  if np.random.uniform() < p_light:
+    nproduce N(id)
+    
+    for i in range(num_leaves_to_break):
+      roll = 360 * (i / num_leaves_to_break) + np.random.uniform(-20, 20)
+      tilt = np.random.uniform(30,60)
+      nproduce[RollL(roll)^(tilt)L_sL(INC(),0,0)]
+    produce I(1,other_start)M(INC(),0,0)
   
-  produce B(id, p, a+1)
+  produce B(id, p, a+1, 0)
 
 
 M(id, age, prog):
   nproduce /(prog * bud_rot_factor)N(id)
-  if np.random.uniform() < 0.25:
-    nproduce [^(np.random.uniform(15, 45))I(0.5,0.1)B(INC(), 0.0, 0)]
-  produce I(1,other_start)M(INC(), age+1, prog+1)
+  grow_len = 1
+  num_buds = poisson.rvs(bud_incidence * grow_len)
+  for i in range(num_buds):
+    roll = 360 * i / num_buds
+    nproduce [RollL(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),0.0,0,0)]  
+  
+  bends = poisson.rvs(rand_bend * grow_len)
+  nproduce I(grow_len, trunk_start)
+  if bends:
+    nproduce ^(np.random.uniform(-30,30))
+  
+  produce M(INC(), age+1, prog+1)
 
 interpretation:
 I(l,d) --> SetColor(1)F(l,d)
@@ -104,12 +155,15 @@ GlobalGuide(c, l):
   produce @R(0,0,1,1,0,0)SetGuide(c,l)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
-
-B(id, p, a) --> GetPos(LOGGER[id])SetColor(3)@O(0.25)
+Roll(a) --> /(a)
+B(id, p, a, l) --> GetPos(LOGGER[id])SetColor(3)@O(0.1)@L('\nLighting: {:.3f}'.format(l))
 R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
-M(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
+M(id, age, prog) --> GetPos(LOGGER[id])SetColor(4)@O(0.1)
 M_t(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])@L(str(id))
+L_s --> F(0.05, 0.01)
+L(id, l, e) --> GetPos(LOGGER[id])~l@L('\nLighting: {:.3f}'.format(l))
+
 Tie(wall, idx):
   produce [@L('({}: {})'.format(wall, idx))Frame(1.5, 0.5)]
   
@@ -129,23 +183,36 @@ endlsystem
 def StartEach():
   return LAST_LSTRING
 
-def EndEach(lstring):
+def EndEach(lstring, scene):
   global LAST_LSTRING
+  
+  lighting = diffuseInterception(scene)
+  lighting_dict = {
+    'B': 3,
+    'L': 1,
+  }
+  for k, v in lighting.items():
+    name = lstring[k].name
+    if name in lighting_dict:
+      lstring[k][lighting_dict[name]] = v
+  
   LAST_LSTRING = lstring
   return lstring
-  
+
+
 def EndInterpretation():
 
   
-  global LAST_LSTRING
-  global next_target
-  global TEST
-  
+  global LAST_LSTRING  
   
   lstring = LAST_LSTRING
+  
+  
   iter = getIterationNb()
+  
+  print('Interpreting {}'.format(iter))
   if iter:
-    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S', 'B'], ['I_t', 'I', 'I_b', 'Dummy'], None, ['GlobalGuide'])
+    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S', 'B', 'L'], ['I_t', 'I', 'I_b', 'Dummy', 'L_s'], None, ['GlobalGuide'])
     tree.set_node_attributes(LOGGER, name='position')
     
     strat.set_tree(tree)
@@ -156,4 +223,3 @@ def EndInterpretation():
   #with open('test.json', 'w') as fh:
   #  json.dump(json_data, fh)
   LAST_LSTRING = lstring
-  TEST = iter

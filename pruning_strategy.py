@@ -56,6 +56,10 @@ class UFOPruningStrategy(PruningStrategy):
 
 
     def tie_branch(self, nodes, target_obj: Target, tie_module=None):
+
+        if len(nodes) < 2:
+            return None
+
         pts = np.array([self.tree.graph.nodes[n]['position'] for n in nodes])
         offsets = np.linalg.norm(pts[:-1] - pts[1:], axis=1)
         cumul_lens = np.cumsum(offsets)
@@ -68,17 +72,15 @@ class UFOPruningStrategy(PruningStrategy):
                                                                     pts[2 if nodes[0] == 0 else 1] - pts[0], 1)
                 if rez.success:
 
-
-
-
                     curve_pts = curves.CubicBezier(*params[0]).eval(np.linspace(0, 1, 10))
                     curve_len = np.sum(np.linalg.norm(curve_pts[:-1] - curve_pts[1:], axis=1))
                     tie_down_node_idx = (np.argmax(cumul_lens > curve_len) or len(nodes) - 2)
                     self.tree.set_guide_on_nodes(nodes[:tie_down_node_idx + 1], curve_pts, 'GlobalGuide')
 
-                    print('-------------\nSuccessfully tied branch to Target {}'.format(target_obj))
-                    print('Start pt: {:.3f}, {:.3f}, {:.3f}'.format(*pts[0]))
-                    print('End pt: {:.3f}, {:.3f}, {:.3f}'.format(*curve_pts[-1]))
+                    if pts[0][2] > 3.0:
+                        print('-------------\nSuccessfully tied branch to Target {}'.format(target_obj))
+                        print('Start pt: {:.3f}, {:.3f}, {:.3f}'.format(*pts[0]))
+                        print('End pt: {:.3f}, {:.3f}, {:.3f}'.format(*curve_pts[-1]))
 
                     tied_edge = (nodes[tie_down_node_idx], nodes[tie_down_node_idx+1])
                     if tie_module:
@@ -101,6 +103,7 @@ class UFOPruningStrategy(PruningStrategy):
 
     def apply_strategy(self, **kwargs):
         self.tie_down_trunk()
+        self.remove_tertiary_branches()
         self.examine_leaders()
 
     def tie_down_trunk(self):
@@ -124,6 +127,19 @@ class UFOPruningStrategy(PruningStrategy):
         if tied_edge:
             self.next_trunk_target += 1
 
+    def remove_tertiary_branches(self):
+        tertiary_branch_ids = self.tree.search_branches('generation', '=', 3)
+        to_remove = []
+        for bid in tertiary_branch_ids:
+            branch = self.tree.branches[bid]
+            nodes = branch['nodes']
+            edge = (nodes[0], nodes[1])
+            edge_type = self.tree.graph.edges[edge]['name']
+            if edge_type in ['I', 'I_t']:
+                to_remove.append(edge)
+
+        self.tree.remove_edges(to_remove)
+
     def examine_leaders(self):
         if self.trunk_branch['length'] < 5:
             self.rub_off_trunk_buds()
@@ -131,13 +147,20 @@ class UFOPruningStrategy(PruningStrategy):
 
 
     def rub_off_trunk_buds(self, avoid_marked=True):
+        print('Looking for buds to remove')
         trunk_nodes = self.trunk_branch['nodes']
         to_remove = []
-        for edge in self.find_buds(trunk_nodes):
-            if not avoid_marked or (avoid_marked and self.find_module('Mark', edge)):
-                to_remove.append(edge)
+        buds = self.find_buds(trunk_nodes)
+        print('Buds found: {}\n{}'.format(len(buds), buds))
+        for bud in buds:
+            print('Looking at: {}'.format(bud))
+            if not avoid_marked or (avoid_marked and not self.find_module('Mark', bud)):
+                to_remove.append(bud)
 
-        self.tree.graph.remove_edges_from(to_remove)
+        if to_remove:
+            print('Rubbing off buds: {}'.format(to_remove))
+
+        self.tree.remove_edges(to_remove)
 
 
     def manage_leaders(self):
@@ -211,6 +234,7 @@ class UFOPruningStrategy(PruningStrategy):
                 cum_dist = node_dist_map[node_on_trunk]
                 print('{}: {:.3f}'.format(bud_edge, cum_dist))
                 if cum_dist < self.params.get('trunk_bare_dist', 5):
+                    self.tree.graph.remove_edge(*bud_edge)
                     continue
 
                 best_spacing = None
@@ -231,10 +255,12 @@ class UFOPruningStrategy(PruningStrategy):
                     self.tree.graph.edges[bud_edge]['pre_modules'] = [('Mark', [best_wall_id])]
 
                     # Simulate bud activation
-                    self.tree.graph.nodes[bud_edge[1]]['args'][1] = 0.9
+                    self.tree.graph.nodes[bud_edge[1]]['args'][1] = 1.0
 
                     wall_spacings[best_wall_id].append(cum_dist)
                     wall_spacings[best_wall_id].sort()
+                else:
+                    self.tree.graph.remove_edge(*bud_edge)
 
     def manage_tied_branch(self, nodes, wall_id, wall_tie_idx):
 
@@ -244,6 +270,13 @@ class UFOPruningStrategy(PruningStrategy):
             next_target = self.wire_walls[wall_id][wall_tie_idx + 1]
             base_pt = self.tree.graph.nodes[nodes[0]]['position']
             _, wire_target = next_target.get_point_dist(base_pt)
+
+            # TEMP
+            if base_pt[2] > 3.0 and abs(wire_target[0] - base_pt[0]) > 1.0:
+                print('WTF (Wall {}, Tie {})'.format(wall_id, wall_tie_idx))
+                print('Nodes: {}'.format(nodes))
+                print('Target: {}'.format(next_target))
+
             self.tie_branch(nodes, PointTarget(wire_target), ('Tie', [wall_id, wall_tie_idx + 1]))
 
 

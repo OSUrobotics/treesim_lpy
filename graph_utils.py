@@ -37,6 +37,10 @@ class LStringGraphDual:
 
         return info
 
+    def remove_edges(self, edges):
+        self.graph.remove_edges_from(edges)
+        self._branches = None
+
     def extract_branches(self):
         bids = {self.graph.edges[e]['branch_id'] for e in self.graph.edges}
         all_branches = {}
