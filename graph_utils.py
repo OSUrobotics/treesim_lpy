@@ -333,7 +333,7 @@ class Counter:
 
 
 
-def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, root):
+def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attrib, root):
     """
     Computes concentration values from fluxes.
     source_attrib: Graph node attribute containing source/sink values (defaults to 0)
@@ -341,18 +341,18 @@ def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, ro
     conc_attrib: Graph node attribute to insert concentration values
     """
 
-    graph_copy = graph.copy(as_view=False)
+    graph = base_graph.copy(as_view=False)
     def compute_upstream_vals(node):
 
-        if graph_copy.nodes[node].get('upstream') is not None:
-            info = graph_copy.nodes[node]['upstream']
+        if graph.nodes[node].get('upstream') is not None:
+            info = graph.nodes[node]['upstream']
             return info['source_strength'], info['resistance']
 
-        successors = list(graph_copy[node])
+        successors = list(graph[node])
         if not successors:
             # This is a terminal node, check for a source/sink strength
-            source_strength = graph_copy.nodes[node].get(source_attrib, 0)
-            graph_copy.nodes[node]['upstream'] = {
+            source_strength = graph.nodes[node].get(source_attrib, 0)
+            graph.nodes[node]['upstream'] = {
                 'resistance': 0,
                 'source_strength': source_strength,
                 'upstream_edges': {},
@@ -365,7 +365,7 @@ def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, ro
 
         for successor in successors:
             upstream_source, upstream_res = compute_upstream_vals(successor)
-            cur_res = upstream_res + graph_copy.edges[node, successor][res_attrib]
+            cur_res = upstream_res + graph.edges[node, successor][res_attrib]
 
             upstream_edge_info[successor] = {
                 'source_strength': upstream_source,
@@ -377,10 +377,11 @@ def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, ro
                 equiv_res = cur_res
             else:
                 # Parallel connection
-                equiv_res = (cur_res * equiv_res) / (cur_res + equiv_res)
                 equiv_source = (equiv_source * cur_res + upstream_source * equiv_res) / (cur_res + equiv_res)
+                equiv_res = (cur_res * equiv_res) / (cur_res + equiv_res)
 
-        graph_copy.nodes[node]['upstream'] = {
+
+        graph.nodes[node]['upstream'] = {
             'resistance': equiv_res,
             'source_strength': equiv_source,
             'upstream_edges': upstream_edge_info
@@ -388,31 +389,44 @@ def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, ro
 
         return equiv_source, equiv_res
 
-    import pdb
-    pdb.set_trace()
-
     compute_upstream_vals(root)
 
-    base_source = graph_copy.nodes[root][source_attrib]
-    graph_copy.nodes[root][conc_attrib] = base_source
-    flux = graph_copy.nodes[root]['upstream_edges']
+    base_source = graph.nodes[root][source_attrib]
+    graph.nodes[root][conc_attrib] = base_source
 
-    # TODO: Compute current in initial cell. Then iterate through process of computing current,
-    # computing new voltage
+    for edge in nx.algorithms.dfs_edges(graph, source=root):
 
-    for edge in nx.algorithms.dfs_edges(graph_copy, source=root):
-        base_strength = graph_copy.nodes[edge[0]][conc_attrib]
-        seg_res = graph_copy.edges[edge][res_attrib]
-        graph_copy.nodes
+        base_strength = graph.nodes[edge[0]][conc_attrib]
+        upstream_edge_info = graph.nodes[edge[0]]['upstream']['upstream_edges'][edge[1]]
+
+        equiv_source = upstream_edge_info['source_strength']
+        equiv_res = upstream_edge_info['resistance']
+        flux = (equiv_source - base_strength) / equiv_res
+
+        edge_res = graph.edges[edge][res_attrib]
+        graph.edges[edge]['flux'] = flux
+        graph.nodes[edge[1]][conc_attrib] = base_strength + flux * edge_res
 
 
+    # Sanity check the flux values at each node
+    for node in graph.nodes:
+        if graph.in_degree[node] and graph.out_degree[node]:
+            predec = list(graph.predecessors(node))[0]
+            in_flux = graph.edges[predec,node]['flux']
+
+            successors = graph.successors(node)
+            out_flux = sum([graph.edges[node, successor]['flux'] for successor in successors])
+            print('Node {}:\n\tIn flux:  {:.3f}\n\tOut flux: {:.3f}'.format(node, in_flux, out_flux))
+
+    import pdb
+    pdb.set_trace()
 
 if __name__ == '__main__':
 
     test_graph = nx.DiGraph()
     test_graph.add_nodes_from([0,1,2,3,4])
     test_graph.add_edges_from([(0,1),(1,2),(1,3),(3,4)])
-    strengths = {0: -5, 2: 5, 3: -2}
+    strengths = {0: 0, 2: 5, 4: 2}
     resistances = {
         (0,1): 2,
         (1,2): 5,
@@ -422,7 +436,7 @@ if __name__ == '__main__':
     nx.set_node_attributes(test_graph, strengths, name='source_strength')
     nx.set_edge_attributes(test_graph, resistances, name='resistance')
 
-    compute_source_sink_values(test_graph, 'source_strength', 'resistance', 'asdf', 0)
+    compute_source_sink_values(test_graph, 'source_strength', 'resistance', 'concentration', 0)
 
 
 
