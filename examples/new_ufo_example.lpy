@@ -81,7 +81,7 @@ strat = pruning_strategy.UFOPruningStrategy(targets, wire_walls, **params)
 module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
 module I_t, I, Dummy			# Trunk internode, regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
-module Roll		# Directional module that doesn't get picked up by the tree stuff
+module NDRoll		# Directional module that doesn't get picked up by the tree stuff
 module Flags, GlobalGuide, Viz, Mark
 module L_s, L 		# Leaf stem, leaf
 
@@ -104,7 +104,7 @@ M_t(id, age, prog):
   num_buds = poisson.rvs(bud_incidence * grow_len)
   for i in range(num_buds):
     roll = 360 * i / num_buds
-    nproduce [RollL(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),0.0,0,0)]
+    nproduce [NDRoll(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),1,0,0)]
   
   bends = poisson.rvs(rand_bend * grow_len)
   nproduce I_t(grow_len, trunk_start)
@@ -114,20 +114,20 @@ M_t(id, age, prog):
   produce M_t(INC(), age+1, prog+1)
 
 B(id, p, a, l):
-  
+  # p is temporary standin for suppression - Set to 0 to suppress a bud
   # if a >= bud_max_age:
   #   produce B(id, p, a+1, 0)
   
   p_light = bud_break_func(l) 
   num_leaves_to_break = min(5, int(l / 0.05))
   print('{}: {:.3f} (l={:.3f})'.format(id, p_light, l))
-  if np.random.uniform() < p_light:
+  if np.random.uniform() < p * p_light:
     nproduce N(id)
     
     for i in range(num_leaves_to_break):
       roll = 360 * (i / num_leaves_to_break) + np.random.uniform(-20, 20)
       tilt = np.random.uniform(30,60)
-      nproduce[RollL(roll)^(tilt)L_sL(INC(),0,0)]
+      nproduce[NDRoll(roll)^(tilt)L_sL(INC(),0,0)]
     produce I(1,other_start)M(INC(),0,0)
   
   produce B(id, p, a+1, 0)
@@ -139,7 +139,7 @@ M(id, age, prog):
   num_buds = poisson.rvs(bud_incidence * grow_len)
   for i in range(num_buds):
     roll = 360 * i / num_buds
-    nproduce [RollL(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),0.0,0,0)]  
+    nproduce [NDRoll(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),1,0,0)]  
   
   bends = poisson.rvs(rand_bend * grow_len)
   nproduce I(grow_len, trunk_start)
@@ -155,14 +155,14 @@ GlobalGuide(c, l):
   produce @R(0,0,1,1,0,0)SetGuide(c,l)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
-Roll(a) --> /(a)
+NDRoll(a) --> /(a)
 B(id, p, a, l) --> GetPos(LOGGER[id])SetColor(3)@O(0.1)@L('\nLighting: {:.3f}'.format(l))
 R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M(id, age, prog) --> GetPos(LOGGER[id])SetColor(4)@O(0.1)
 M_t(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])@L(str(id))
 L_s --> F(0.05, 0.01)
-L(id, l, e) --> GetPos(LOGGER[id])~l@L('\nLighting: {:.3f}'.format(l))
+L(id, l, e) --> GetPos(LOGGER[id])SetColor(0,255,0)~lf(0.10)@L('\nLighting: {:.3f}'.format(l))
 
 Tie(wall, idx):
   produce [@L('({}: {})'.format(wall, idx))Frame(1.5, 0.5)]
@@ -212,7 +212,7 @@ def EndInterpretation():
   
   print('Interpreting {}'.format(iter))
   if iter:
-    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S', 'B', 'L'], ['I_t', 'I', 'I_b', 'Dummy', 'L_s'], None, ['GlobalGuide'])
+    tree = graph_utils.LStringGraphDual.from_lstring(lstring, ['R', 'N', 'M', 'M_t', 'S', 'B', 'L'], ['I_t', 'I', 'I_b', 'Dummy', 'L_s'], None, ['GlobalGuide', 'NDRoll'])
     tree.set_node_attributes(LOGGER, name='position')
     
     strat.set_tree(tree)

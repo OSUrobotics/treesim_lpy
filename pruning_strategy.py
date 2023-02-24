@@ -143,25 +143,25 @@ class UFOPruningStrategy(PruningStrategy):
     def examine_leaders(self):
         if self.trunk_branch['length'] < 5:
             self.rub_off_trunk_buds()
+
+        self.suppress_trunk_buds()
         self.manage_leaders()
 
 
     def rub_off_trunk_buds(self, avoid_marked=True):
-        print('Looking for buds to remove')
         trunk_nodes = self.trunk_branch['nodes']
         to_remove = []
         buds = self.find_buds(trunk_nodes)
-        print('Buds found: {}\n{}'.format(len(buds), buds))
         for bud in buds:
-            print('Looking at: {}'.format(bud))
             if not avoid_marked or (avoid_marked and not self.find_module('Mark', bud)):
                 to_remove.append(bud)
 
-        if to_remove:
-            print('Rubbing off buds: {}'.format(to_remove))
-
         self.tree.remove_edges(to_remove)
 
+    def suppress_trunk_buds(self):
+        buds = self.find_buds(self.trunk_branch['nodes'])
+        for bud_edge in buds:
+            self.tree.graph.nodes[bud_edge[1]]['args'][1] = 0.0
 
     def manage_leaders(self):
         first_gen_branches = self.tree.search_branches('generation', '=', 1)
@@ -256,7 +256,6 @@ class UFOPruningStrategy(PruningStrategy):
 
                     # Simulate bud activation
                     self.tree.graph.nodes[bud_edge[1]]['args'][1] = 1.0
-
                     wall_spacings[best_wall_id].append(cum_dist)
                     wall_spacings[best_wall_id].sort()
                 else:

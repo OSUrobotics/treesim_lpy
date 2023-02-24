@@ -283,6 +283,21 @@ class LStringGraphDual:
         return cls(final_graph)
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 class Converter:
 
     def serialize(self, module):
@@ -317,16 +332,98 @@ class Counter:
         return cur_val
 
 
-if __name__ == '__main__':
-    import pickle
-    with open(r'D:\Documents\Temp\test.pickle', 'rb') as fh:
-        tree = pickle.load(fh)
 
-    tree.branches
+def compute_source_sink_values(graph, source_attrib, res_attrib, conc_attrib, root):
+    """
+    Computes concentration values from fluxes.
+    source_attrib: Graph node attribute containing source/sink values (defaults to 0)
+    res_attrib: Graph edge attribute containing concentration-based resistance values
+    conc_attrib: Graph node attribute to insert concentration values
+    """
+
+    graph_copy = graph.copy(as_view=False)
+    def compute_upstream_vals(node):
+
+        if graph_copy.nodes[node].get('upstream') is not None:
+            info = graph_copy.nodes[node]['upstream']
+            return info['source_strength'], info['resistance']
+
+        successors = list(graph_copy[node])
+        if not successors:
+            # This is a terminal node, check for a source/sink strength
+            source_strength = graph_copy.nodes[node].get(source_attrib, 0)
+            graph_copy.nodes[node]['upstream'] = {
+                'resistance': 0,
+                'source_strength': source_strength,
+                'upstream_edges': {},
+            }
+            return source_strength, 0
+
+        equiv_source = None
+        equiv_res = None
+        upstream_edge_info = {}
+
+        for successor in successors:
+            upstream_source, upstream_res = compute_upstream_vals(successor)
+            cur_res = upstream_res + graph_copy.edges[node, successor][res_attrib]
+
+            upstream_edge_info[successor] = {
+                'source_strength': upstream_source,
+                'resistance': cur_res,
+            }
+
+            if equiv_source is None:
+                equiv_source = upstream_source
+                equiv_res = cur_res
+            else:
+                # Parallel connection
+                equiv_res = (cur_res * equiv_res) / (cur_res + equiv_res)
+                equiv_source = (equiv_source * cur_res + upstream_source * equiv_res) / (cur_res + equiv_res)
+
+        graph_copy.nodes[node]['upstream'] = {
+            'resistance': equiv_res,
+            'source_strength': equiv_source,
+            'upstream_edges': upstream_edge_info
+        }
+
+        return equiv_source, equiv_res
+
     import pdb
     pdb.set_trace()
 
-    tree.to_lstring()
+    compute_upstream_vals(root)
+
+    base_source = graph_copy.nodes[root][source_attrib]
+    graph_copy.nodes[root][conc_attrib] = base_source
+    flux = graph_copy.nodes[root]['upstream_edges']
+
+    # TODO: Compute current in initial cell. Then iterate through process of computing current,
+    # computing new voltage
+
+    for edge in nx.algorithms.dfs_edges(graph_copy, source=root):
+        base_strength = graph_copy.nodes[edge[0]][conc_attrib]
+        seg_res = graph_copy.edges[edge][res_attrib]
+        graph_copy.nodes
+
+
+
+if __name__ == '__main__':
+
+    test_graph = nx.DiGraph()
+    test_graph.add_nodes_from([0,1,2,3,4])
+    test_graph.add_edges_from([(0,1),(1,2),(1,3),(3,4)])
+    strengths = {0: -5, 2: 5, 3: -2}
+    resistances = {
+        (0,1): 2,
+        (1,2): 5,
+        (1,3): 2,
+        (3,4): 1
+    }
+    nx.set_node_attributes(test_graph, strengths, name='source_strength')
+    nx.set_edge_attributes(test_graph, resistances, name='resistance')
+
+    compute_source_sink_values(test_graph, 'source_strength', 'resistance', 'asdf', 0)
+
 
 
     # import matplotlib.pyplot as plt
