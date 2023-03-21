@@ -14,8 +14,9 @@ import graph_utils
 import branch_operations as bops
 import curves
 import pruning_strategy
+import core
 
-for mod in [graph_utils, bops, curves, pruning_strategy]:
+for mod in [graph_utils, bops, curves, pruning_strategy, core]:
   importlib.reload(mod)
 
 
@@ -70,7 +71,7 @@ bud_break_func = LinearRamp(0.05, 0.12)
 targets = [bops.PointTarget([x, 0.0, 2.0]) for x in [5.0, 10.0, 15.0]]
 wire_walls = [
 [bops.LinearTarget([0, 0, z], [1, 0 ,0]) for z in [4.0, 8.0, 12.0]],
-]
+]e
 params = {
 'leaders_per_wall': 4,
 }
@@ -78,91 +79,71 @@ strat = pruning_strategy.UFOPruningStrategy(targets, wire_walls, **params)
 
 
 
-module R, N, M, M_t, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
-module I_t, I, Dummy			# Trunk internode, regular internode, dummy
+module R, N, M, S		# Root, Node (generic), Meristem, Trunk meristem, Stub
+module I, Dummy			# Regular internode, dummy
 module B, B_f			# Generic bud, fruiting bud
 module NDRoll		# Directional module that doesn't get picked up by the tree stuff
 module Flags, GlobalGuide, Viz, Mark
 module L_s, L 		# Leaf stem, leaf
 
-Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Viz(strat)Dummy@GeM_t(INC(),0,0)
+Axiom: R(INC())^(np.random.uniform(37.5, 52.5))Viz(strat)Dummy@GeM(INC(), core.Meristem(0, 0, trunk_start))
 # Axiom: R(INC())^(26.01)Dummy@GeM_t(INC(),0)
 
 derivation length: 20
 production:
-I(l,d):
-  nproduce I(l,d+min((other_max-d)/2, other_incr))
-  
-  
-I_t(l,d):
-  nproduce I_t(l,d+min((trunk_max-d)/2, trunk_incr))
-  
-  
-M_t(id, age, prog):
-  nproduce /(prog * bud_rot_factor)N(id)
+I(p):
+  rad_grow = min((p.max_radius - p.radius) / 2, other_incr)
+  p.radius += rad_grow
+  p.age += 1
+  nproduce I(p)
+
+M(id, p):
+  nproduce /(p.prog * bud_rot_factor)N(id)
   grow_len = 1
   num_buds = poisson.rvs(bud_incidence * grow_len)
   for i in range(num_buds):
     roll = 360 * i / num_buds
-    nproduce [NDRoll(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),1,0,0)]
-  
+    nproduce [NDRoll(roll)^(np.random.uniform(30,60))I(core.Branch(0.5,0.1,0,0.2))B(INC(),core.Bud(1,0,0))]
+
   bends = poisson.rvs(rand_bend * grow_len)
-  nproduce I_t(grow_len, trunk_start)
+  nproduce I(core.Branch(grow_len, p.base_rad))
   if bends:
     nproduce ^(np.random.uniform(-30,30))
-  
-  produce M_t(INC(), age+1, prog+1)
 
-B(id, p, a, l):
-  # p is temporary standin for suppression - Set to 0 to suppress a bud
-  # if a >= bud_max_age:
-  #   produce B(id, p, a+1, 0)
-  
-  p_light = bud_break_func(l) 
-  num_leaves_to_break = min(5, int(l / 0.05))
-  print('{}: {:.3f} (l={:.3f})'.format(id, p_light, l))
+  produce M(INC(), core.Meristem(p.age+1, p.prog+1))
+
+B(id, p):
+
+  p_light = bud_break_func(p.light)
+  num_leaves_to_break = min(5, int(p.light / 0.05))
+  print('{}: {:.3f} (l={:.3f})'.format(id, p_light, p.light))
   if np.random.uniform() < p * p_light:
     nproduce N(id)
     
     for i in range(num_leaves_to_break):
       roll = 360 * (i / num_leaves_to_break) + np.random.uniform(-20, 20)
       tilt = np.random.uniform(30,60)
-      nproduce[NDRoll(roll)^(tilt)L_sL(INC(),0,0)]
-    produce I(1,other_start)M(INC(),0,0)
-  
-  produce B(id, p, a+1, 0)
+      nproduce[NDRoll(roll)^(tilt)L_sL(INC(),core.Leaf(0,0))]
+    produce I(core.Branch(1, other_start))M(INC(),core.Meristem(0,0))
 
+  p.age = p.age + 1
+  produce B(id, p)
 
-M(id, age, prog):
-  nproduce /(prog * bud_rot_factor)N(id)
-  grow_len = 1
-  num_buds = poisson.rvs(bud_incidence * grow_len)
-  for i in range(num_buds):
-    roll = 360 * i / num_buds
-    nproduce [NDRoll(roll)^(np.random.uniform(30,60))I(0.5,0.1)B(INC(),1,0,0)]  
-  
-  bends = poisson.rvs(rand_bend * grow_len)
-  nproduce I(grow_len, trunk_start)
-  if bends:
-    nproduce ^(np.random.uniform(-30,30))
-  
-  produce M(INC(), age+1, prog+1)
 
 interpretation:
-I(l,d) --> SetColor(1)F(l,d)
-I_t(l,d) --> SetColor(2)F(l,d)
+I(p) --> SetColor(1)F(p.length,p.radius)
 GlobalGuide(c, l):
   produce @R(0,0,1,1,0,0)SetGuide(c,l)
 # I_b --> SetColor(3)F(0.5, 0.1)
 
 NDRoll(a) --> /(a)
-B(id, p, a, l) --> GetPos(LOGGER[id])SetColor(3)@O(0.1)@L('\nLighting: {:.3f}'.format(l))
+B(id, p) --> GetPos(LOGGER[id])SetColor(3)@O(0.1)@L('\nLighting: {:.3f}'.format(p.light))
 R(id) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 M(id, age, prog) --> GetPos(LOGGER[id])SetColor(4)@O(0.1)
 M_t(id, age, prog) --> GetPos(LOGGER[id])[Frame(0.75, 0.5)]
 N(id) --> GetPos(LOGGER[id])@L(str(id))
 L_s --> F(0.05, 0.01)
-L(id, l, e) --> GetPos(LOGGER[id])SetColor(0,255,0)~lf(0.10)@L('\nLighting: {:.3f}'.format(l))
+L(id, p) --> GetPos(LOGGER[id])SetColor(0,255,0)~lf(0.10)@L('\nLighting: {:.3f}'.format(p.light))
 
 Tie(wall, idx):
   produce [@L('({}: {})'.format(wall, idx))Frame(1.5, 0.5)]

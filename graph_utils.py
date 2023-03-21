@@ -164,13 +164,15 @@ class LStringGraphDual:
                 data = self.graph.edges[edge]
                 queued_modules.extend(data.get('pre_turtle_modules', []))
                 queued_modules.extend(data.get('pre_modules', []))
-                queued_modules.append((data['name'], data['args']))
+                existing_params = data.get('params', None)
+                queued_modules.append((data['name'], [existing_params] if existing_params else []))
                 queued_modules.extend(data.get('post_modules', []))
                 queued_modules.extend(data.get('post_turtle_modules', []))
 
                 node_info = self.graph.nodes[edge[1]]
                 if node_info['name']:
-                    queued_modules.append((node_info['name'], node_info.get('args', [])))
+                    existing_params = node_info.get('params', None)
+                    queued_modules.append((node_info['name'], [existing_params] if existing_params else []))
 
                 next_edge = None
                 for node in self.graph.successors(edge[1]):
@@ -240,8 +242,12 @@ class LStringGraphDual:
             name = module.name
             if name in node_modules:
                 module_id = module.args[0]
+                param_set = None
+                if len(module.args) > 1:
+                    param_set = module.args[1]
+
                 assert module_id not in final_graph
-                final_graph.add_node(module_id, name=name, args=module.args)
+                final_graph.add_node(module_id, name=name, params=param_set)
                 if last_node is not None:
                     queued_internode['post_modules'] = queued_modules
                     queued_internode['post_turtle_modules'] = queued_turtle_modules
@@ -252,7 +258,12 @@ class LStringGraphDual:
 
                 last_node = module_id
             elif name in internode_modules:
-                queued_internode = {'name': name, 'args': module.args, 'branch_id': bid, 'pre_modules': queued_modules,
+
+                param_set = None
+                if len(module.args):
+                    param_set = module.args[0]
+
+                queued_internode = {'name': name, 'params': param_set, 'branch_id': bid, 'pre_modules': queued_modules,
                                     'pre_turtle_modules': queued_turtle_modules}
                 queued_modules = []
                 queued_turtle_modules = []
@@ -333,15 +344,12 @@ class Counter:
 
 
 
-def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attrib, root):
+def compute_source_sink_values(base_graph, root):
     """
     Computes concentration values from fluxes.
-    source_attrib: Graph node attribute containing source/sink values (defaults to 0)
-    res_attrib: Graph edge attribute containing concentration-based resistance values
-    conc_attrib: Graph node attribute to insert concentration values
     """
 
-    graph = base_graph.copy(as_view=False)
+    graph = base_graph
     def compute_upstream_vals(node):
 
         if graph.nodes[node].get('upstream') is not None:
@@ -351,7 +359,7 @@ def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attri
         successors = list(graph[node])
         if not successors:
             # This is a terminal node, check for a source/sink strength
-            source_strength = graph.nodes[node].get(source_attrib, 0)
+            source_strength = graph.nodes[node]['props'].source
             graph.nodes[node]['upstream'] = {
                 'resistance': 0,
                 'source_strength': source_strength,
@@ -365,7 +373,7 @@ def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attri
 
         for successor in successors:
             upstream_source, upstream_res = compute_upstream_vals(successor)
-            cur_res = upstream_res + graph.edges[node, successor][res_attrib]
+            cur_res = upstream_res + graph.edges[node, successor]['resistance']
 
             upstream_edge_info[successor] = {
                 'source_strength': upstream_source,
@@ -391,7 +399,9 @@ def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attri
 
     compute_upstream_vals(root)
 
-    base_source = graph.nodes[root][source_attrib]
+    conc_attrib = 'computed_concentration'
+
+    base_source = graph.nodes[root]['props'].source
     graph.nodes[root][conc_attrib] = base_source
 
     for edge in nx.algorithms.dfs_edges(graph, source=root):
@@ -401,11 +411,11 @@ def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attri
 
         equiv_source = upstream_edge_info['source_strength']
         equiv_res = upstream_edge_info['resistance']
-        flux = (equiv_source - base_strength) / equiv_res
+        flux = (base_strength - equiv_source) / equiv_res
 
-        edge_res = graph.edges[edge][res_attrib]
+        edge_res = graph.edges[edge]['resistance']
         graph.edges[edge]['flux'] = flux
-        graph.nodes[edge[1]][conc_attrib] = base_strength + flux * edge_res
+        graph.nodes[edge[1]][conc_attrib] = base_strength - flux * edge_res
 
 
     # Sanity check the flux values at each node
@@ -418,8 +428,6 @@ def compute_source_sink_values(base_graph, source_attrib, res_attrib, conc_attri
             out_flux = sum([graph.edges[node, successor]['flux'] for successor in successors])
             print('Node {}:\n\tIn flux:  {:.3f}\n\tOut flux: {:.3f}'.format(node, in_flux, out_flux))
 
-    import pdb
-    pdb.set_trace()
 
 if __name__ == '__main__':
 
