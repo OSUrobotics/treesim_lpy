@@ -15,7 +15,7 @@ def cut_using_string_manipulation(pruning_id, s, path = None):
         end signified by ']' or the entire subtrees if pruning_id starts from leader"""
   bracket_balance = 0
   cut_num = pruning_id
-  s[cut_num].append("no cut")
+  #s[cut_num].append("no cut")
   cut_num += 1
   pruning_id +=1
   total_length = len(s)
@@ -33,7 +33,7 @@ def cut_using_string_manipulation(pruning_id, s, path = None):
       new_lsystem = Lsystem(path) #Figure out to include time in this
       new_lsystem.axiom = s
       return new_lsystem
-  s.insertAt(cut_num, newmodule("I(1, 0.05)"))
+  #s.insertAt(cut_num, newmodule("I(1, 0.05)"))
   return s
 
 def pruning_strategy(it, lstring):

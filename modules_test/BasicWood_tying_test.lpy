@@ -34,7 +34,7 @@ class Branch(BasicWood):
   def grow(self):
     pass  
     
-wood = Branch(tie_axis = (1,1,0), max_length = 20, thickness_increment = 0) #Growth in z axis
+wood = Branch(tie_axis = (1,1,0), max_length = 2000, growth_length = 0.1,thickness_increment = 0) #Growth in z axis
 target = (-3, 2, 20)
 #wood = Branch(tie_axis = (1,0,1), max_length = 20, thickness_increment = 0) #Growth in y axis
 #target = (-3, 20, 2)
@@ -43,7 +43,7 @@ target = (-3, 2, 20)
 supp = Wire(0, target, None)
 wood.guide_target = supp
 
-num_iteration_tie = 7
+num_iteration_tie = 50
 
 def StartEach(lstring):
   if wood.tie_updated == False:
@@ -70,7 +70,7 @@ module C #Indicates start of wood
 
 Axiom: [@M(target)@O(1)]C/(45)&(90)GetPos(wood.start)A(wood)GetPos(wood.end)
 
-derivation length: 30
+derivation length: 1000
 
 production:
 A(t) :

@@ -68,12 +68,12 @@ end_header'''.format(len(vertices), len(faces))
     f.close()
 
 if __name__ == "__main__":
-    num_trees = 25
+    num_trees = 15
     for i in range(num_trees):
         scene = sg.Scene()
         rand_seed = rd.randint(0,1000)
         variables = {'label': True, 'seed_val': rand_seed}
-        l = Lsystem('../examples/Envy_tie_prune_label.lpy', variables)
+        l = Lsystem('../examples/UFO_tie_prune_label.lpy', variables)
         lstring = l.axiom
         for time in range(l.derivationLength):
             lstring = l.derive(lstring, time, 1)
@@ -82,18 +82,19 @@ if __name__ == "__main__":
         #input()
         scene = l.sceneInterpretation(lstring)
         write("dataset/labelled/tree_{}.ply".format(i), scene)
+        print("i")
         del scene
         del lstring
         del l
-        scene = sg.Scene()
-        variables = {'label': False, 'seed_val': rand_seed}
-        l = Lsystem('../examples/Envy_tie_prune_label.lpy', variables)
-        lstring = l.axiom
-        for time in range(l.derivationLength):
-            lstring = l.derive(lstring, time, 1)
-            l.plot(lstring)
-        l.plot(lstring)
+       # scene = sg.Scene()
+       # variables = {'label': False, 'seed_val': rand_seed}
+       # l = Lsystem('../examples/UFO_tie_prune_label.lpy', variables)
+       # lstring = l.axiom
+       # for time in range(l.derivationLength):
+       #     lstring = l.derive(lstring, time, 1)
+       #     l.plot(lstring)
+       # l.plot(lstring)
         #input()
-        scene = l.sceneInterpretation(lstring)
-        write("dataset/unlabelled/tree_{}.ply".format(i), scene)
+        #scene = l.sceneInterpretation(lstring)
+       # write("dataset/unlabelled/tree_{}.ply".format(i), scene)
   

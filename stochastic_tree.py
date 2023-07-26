@@ -40,7 +40,7 @@ class BasicWood(ABC):
 
   def __init__(self, copy_from = None, max_buds_segment: int = 5, thickness: float = 0.1,\
                thickness_increment: float = 0.01, growth_length: float = 1., max_length: float = 7.,\
-               tie_axis: tuple = (0,1,1),  order: int = 0, color: int = 0, name: str = None):#,\
+               tie_axis: list = (0,1,1),  order: int = 0, color: int = 0, name: str = None):#,\
                #bud_break_prob_func: "Function" = lambda x,y: rd.random()):
                  
     #Location variables
@@ -104,7 +104,7 @@ class BasicWood(ABC):
     
   def grow_one(self):
     self.age+=1
-    self.length+=1
+    self.length+=self.growth_length
     self.grow()
   
   @abstractmethod
@@ -119,6 +119,7 @@ class BasicWood(ABC):
   def update_guide(self, guide_target):
     curve = []
     self.guide_target = guide_target
+    print("updating guide")
     if self.guide_target == -1:
       return
     if self.has_tied == False:
@@ -127,11 +128,13 @@ class BasicWood(ABC):
       curve, i_target= self.get_control_points(self.guide_target.point, self.last_tie_location , self.end, self.tie_axis)
     if i_target:
       self.guide_points.extend(curve)
-      #print(i_target, self.guide_points[-1])
+      ##print(i_target, self.guide_points[-1])
       #self.last_tie_location = copy.deepcopy(Vector3(i_target)) #Replaced by updating location at StartEach
   
   def tie_lstring(self, lstring, index):
     spline = CSpline(self.guide_points) 
+    if str(spline.curve()) == "nan":
+      print(self.guide_points)
     #print(lstring[index+1].name in ['&','/','SetGuide'], lstring[index+1])
     remove_count = 0
     if not self.has_tied:
@@ -144,16 +147,16 @@ class BasicWood(ABC):
       #print("DELETING", lstring[index+1])
       del(lstring[index+1])
       remove_count+=1
-    lstring.insertAt(index+1, 'SetGuide({}, {})'.format(spline.curve(), self.length))
+    lstring.insertAt(index+1, 'SetGuide({}, {})'.format(spline.curve(stride_factor = 100), self.length))
     return lstring,remove_count
   
   def tie_update(self):
     self.last_tie_location = copy.deepcopy(self.end)
     self.tie_updated = True
 
-  def deflection_at_x(self,d, x, L):
+  def deflection_at_x(self,d, x, L): 
     """d is the max deflection, x is the current location we need deflection on and L is the total length"""
-    return (d/2)*(x**2)/(L**3+0.001)*(3*L - x)
+    return (d/2)*(x**2)/(L**3)*(3*L - x)
   #return d*(1 - np.cos(*np.pi*x/(2*L))) #Axial loading
 
  
@@ -161,21 +164,27 @@ class BasicWood(ABC):
     pts = []
     Lcurve = np.sqrt((start[0]-current[0])**2 + (current[1]-start[1])**2 + (current[2]-start[2])**2)   
     #print(Lcurve, start, current)
-    if Lcurve**2 - (target[0]-start[0])**2*tie_axis[0] - (target[1]-start[1])**2*tie_axis[1] - (target[2]-start[2])**2*tie_axis[2]  < 0:
+    if Lcurve**2 - (target[0]-start[0])**2*tie_axis[0] - (target[1]-start[1])**2*tie_axis[1] - (target[2]-start[2])**2*tie_axis[2]  <=0:
       #print("SHORT")
       return pts,None
 
     curve_end = np.sqrt(Lcurve**2 - (target[0]-start[0])**2*tie_axis[0]-(target[1]-start[1])**2*tie_axis[1] - (target[2]-start[2])**2*tie_axis[2])
+   
+   
     i_target = [target[0], target[1], target[2]]
     for j,axis in enumerate(tie_axis):
       if axis == 0:
-        i_target[j] = start[j]+target[j]/abs(target[j]+eps)*(curve_end)
+        i_target[j] = start[j]+target[j]/abs(target[j])*(curve_end)
         break
     dxyz = np.array(i_target) - np.array(current)
     dx = np.array(current) - np.array(start)
-    for i in range(1,10*int(Lcurve)+1):
-      x = i/(10*int(Lcurve))
+    print("ASDSADS")
+    print(1,Lcurve*10+1,Lcurve)
+    for i in np.arange(0.1,1.1,0.1):
+      x = i#/Lcurve#+1#/(10*(Lcurve))
+      
       d = self.deflection_at_x(dxyz, x*Lcurve, Lcurve)
+      print(x, dxyz, dx, d)
       pts.append(tuple((start[0]+x*dx[0]+d[0],start[1]+x*dx[1]+d[1],start[2]+x*dx[2]+d[2])))
     return pts, i_target
       
