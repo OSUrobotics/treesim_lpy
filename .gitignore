@@ -7,4 +7,5 @@ __pycache__
 *.x3d
 dataset_maker/dataset/*
 #*
+textures/
 build/
